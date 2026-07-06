@@ -9,7 +9,7 @@ import (
 	"fmt"
 )
 
-const LATEST_DB_VERSION = 5
+const LATEST_DB_VERSION = 8
 
 var Client DB
 
@@ -96,6 +96,24 @@ type DB interface {
 
 	// Update Media Item on_server flag
 	UpdateMediaItemOnServer(ctx context.Context, tmdbID string, libraryTitle string, onServer bool) (logErr logging.LogErrorInfo)
+
+	// Create/Update User Subscription
+	CreateSubscription(ctx context.Context, sub models.UserSubscription) (id int, logErr logging.LogErrorInfo)
+
+	// Update User Subscription
+	UpdateSubscription(ctx context.Context, sub models.UserSubscription) (logErr logging.LogErrorInfo)
+
+	// Delete User Subscription
+	DeleteSubscription(ctx context.Context, id int) (logErr logging.LogErrorInfo)
+
+	// Get All User Subscriptions
+	GetAllSubscriptions(ctx context.Context) (subs []models.UserSubscription, logErr logging.LogErrorInfo)
+
+	// Get User Subscription by Username
+	GetSubscriptionByUsername(ctx context.Context, username string) (sub *models.UserSubscription, logErr logging.LogErrorInfo)
+
+	// Get Enabled User Subscriptions
+	GetEnabledSubscriptions(ctx context.Context) (subs []models.UserSubscription, logErr logging.LogErrorInfo)
 }
 
 func NewDatabaseClient() (DB, logging.LogErrorInfo) {
@@ -310,4 +328,46 @@ func UpdateMediaItemOnServer(ctx context.Context, tmdbID string, libraryTitle st
 		return logging.Error_DBClientNotInitialized()
 	}
 	return Client.UpdateMediaItemOnServer(ctx, tmdbID, libraryTitle, onServer)
+}
+
+func CreateSubscription(ctx context.Context, sub models.UserSubscription) (id int, logErr logging.LogErrorInfo) {
+	if Client == nil {
+		return 0, logging.Error_DBClientNotInitialized()
+	}
+	return Client.CreateSubscription(ctx, sub)
+}
+
+func UpdateSubscription(ctx context.Context, sub models.UserSubscription) (logErr logging.LogErrorInfo) {
+	if Client == nil {
+		return logging.Error_DBClientNotInitialized()
+	}
+	return Client.UpdateSubscription(ctx, sub)
+}
+
+func DeleteSubscription(ctx context.Context, id int) (logErr logging.LogErrorInfo) {
+	if Client == nil {
+		return logging.Error_DBClientNotInitialized()
+	}
+	return Client.DeleteSubscription(ctx, id)
+}
+
+func GetAllSubscriptions(ctx context.Context) (subs []models.UserSubscription, logErr logging.LogErrorInfo) {
+	if Client == nil {
+		return nil, logging.Error_DBClientNotInitialized()
+	}
+	return Client.GetAllSubscriptions(ctx)
+}
+
+func GetSubscriptionByUsername(ctx context.Context, username string) (sub *models.UserSubscription, logErr logging.LogErrorInfo) {
+	if Client == nil {
+		return nil, logging.Error_DBClientNotInitialized()
+	}
+	return Client.GetSubscriptionByUsername(ctx, username)
+}
+
+func GetEnabledSubscriptions(ctx context.Context) (subs []models.UserSubscription, logErr logging.LogErrorInfo) {
+	if Client == nil {
+		return nil, logging.Error_DBClientNotInitialized()
+	}
+	return Client.GetEnabledSubscriptions(ctx)
 }

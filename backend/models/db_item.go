@@ -16,6 +16,7 @@ type DBPosterSetDetail struct {
 	SelectedTypes             SelectedTypes `json:"selected_types"`
 	AutoDownload              bool          `json:"auto_download"`
 	AutoAddNewCollectionItems bool          `json:"auto_add_new_collection_items"`
+	Priority                  int           `json:"priority"` // 1 = highest priority, higher number = lower priority (0 = not from subscription)
 	ToDelete                  bool          `json:"to_delete"` // Flag to indicate if the poster set should be deleted (Not used in DB)
 }
 

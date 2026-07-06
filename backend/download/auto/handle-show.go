@@ -150,6 +150,21 @@ func handleShow(ctx context.Context, mediaItem models.MediaItem, dbItem models.D
 		Int("changed_episodes_count", len(changes.ChangedEpisodes)).
 		Msgf("Change details for %s", utils.MediaItemInfo(dbItem.MediaItem))
 
+	// Pre-fetch all MediUX sets for priority-based fallback logic
+	allMediuxSets := make(map[string]models.PosterSet)
+	for _, dbSet := range dbItem.PosterSets {
+		if !dbSet.AutoDownload {
+			continue
+		}
+		mediuxSet, _, fetchErr := mediux.GetShowSetByID(ctx, dbSet.ID, mediaItem.LibraryTitle)
+		if fetchErr.Message == "" && mediuxSet.ID == dbSet.ID {
+			allMediuxSets[dbSet.ID] = mediuxSet.PosterSet
+		}
+	}
+
+	// Build priority map for subscription fallback logic (uses both DB images and MediUX images)
+	priorityMap := buildPriorityMap(dbItem, allMediuxSets)
+
 	for _, dbSet := range dbItem.PosterSets {
 		var setResult AutoDownloadSetResult
 		setResult.ID = dbSet.ID
@@ -261,6 +276,13 @@ func handleShow(ctx context.Context, mediaItem models.MediaItem, dbItem models.D
 				continue
 			} else if image.Type == "titlecard" && !dbSet.SelectedTypes.Titlecard {
 				check.Reason = "Titlecard not selected for this set"
+				actionImageChecks.AppendResult(imageName, check)
+				continue
+			}
+
+			// Check if a higher priority set has this image (subscription fallback)
+			if shouldSkipImageForPriority(dbSet.ID, image.Type, image.SeasonNumber, image.EpisodeNumber, priorityMap) {
+				check.Reason = fmt.Sprintf("Higher priority subscription has this %s", image.Type)
 				actionImageChecks.AppendResult(imageName, check)
 				continue
 			}
@@ -539,4 +561,144 @@ type ImageCheckResult struct {
 	Outcome string         `json:"outcome"`
 	Reason  string         `json:"reason,omitempty"`
 	Details map[string]any `json:"details,omitempty"`
+}
+
+// prioritySetInfo tracks a set's priority for a specific image type
+type prioritySetInfo struct {
+	setID    string
+	priority int
+	images   map[string]models.ImageFile // key: season:episode or empty for poster/backdrop
+}
+
+// buildPriorityMap builds a map of image type -> sorted list of sets by priority
+// Returns map[imageType][]prioritySetInfo sorted by priority (lowest number = highest priority first)
+// It uses both previously downloaded images AND all images from the current check to determine ownership
+func buildPriorityMap(dbItem models.DBSavedItem, allMediuxSets map[string]models.PosterSet) map[string][]prioritySetInfo {
+	result := make(map[string][]prioritySetInfo)
+
+	for _, dbSet := range dbItem.PosterSets {
+		if !dbSet.AutoDownload {
+			continue
+		}
+
+		// Build image lookup for this set - combine previously downloaded with current MediUX set
+		imageMap := make(map[string]models.ImageFile)
+
+		// First add previously downloaded images
+		for _, img := range dbSet.Images {
+			key := ""
+			if img.SeasonNumber != nil {
+				key = fmt.Sprintf("%d", *img.SeasonNumber)
+				if img.EpisodeNumber != nil {
+					key = fmt.Sprintf("%d:%d", *img.SeasonNumber, *img.EpisodeNumber)
+				}
+			}
+			imageMap[img.Type+"|"+key] = img
+		}
+
+		// Then add images from the current MediUX set (if available)
+		if mediuxSet, ok := allMediuxSets[dbSet.ID]; ok {
+			for _, img := range mediuxSet.Images {
+				// Only include images that match this item's TMDB ID
+				if img.ItemTMDB_ID != dbItem.MediaItem.TMDB_ID {
+					continue
+				}
+				key := ""
+				if img.SeasonNumber != nil {
+					key = fmt.Sprintf("%d", *img.SeasonNumber)
+					if img.EpisodeNumber != nil {
+						key = fmt.Sprintf("%d:%d", *img.SeasonNumber, *img.EpisodeNumber)
+					}
+				}
+				imageMap[img.Type+"|"+key] = img
+			}
+		}
+
+		if dbSet.SelectedTypes.Poster {
+			result["poster"] = append(result["poster"], prioritySetInfo{
+				setID:    dbSet.ID,
+				priority: dbSet.Priority,
+				images:   filterImagesByType(imageMap, "poster"),
+			})
+		}
+		if dbSet.SelectedTypes.Backdrop {
+			result["backdrop"] = append(result["backdrop"], prioritySetInfo{
+				setID:    dbSet.ID,
+				priority: dbSet.Priority,
+				images:   filterImagesByType(imageMap, "backdrop"),
+			})
+		}
+		if dbSet.SelectedTypes.SeasonPoster || dbSet.SelectedTypes.SpecialSeasonPoster {
+			result["season_poster"] = append(result["season_poster"], prioritySetInfo{
+				setID:    dbSet.ID,
+				priority: dbSet.Priority,
+				images:   filterImagesByType(imageMap, "season_poster"),
+			})
+		}
+		if dbSet.SelectedTypes.Titlecard {
+			result["titlecard"] = append(result["titlecard"], prioritySetInfo{
+				setID:    dbSet.ID,
+				priority: dbSet.Priority,
+				images:   filterImagesByType(imageMap, "titlecard"),
+			})
+		}
+	}
+
+	// Sort each type by priority (lowest number = highest priority first)
+	for imageType := range result {
+		sets := result[imageType]
+		for i := 1; i < len(sets); i++ {
+			for j := i; j > 0 && sets[j].priority < sets[j-1].priority; j-- {
+				sets[j], sets[j-1] = sets[j-1], sets[j]
+			}
+		}
+		result[imageType] = sets
+	}
+
+	return result
+}
+
+// filterImagesByType filters images map to only include images of the given type
+func filterImagesByType(imageMap map[string]models.ImageFile, imageType string) map[string]models.ImageFile {
+	result := make(map[string]models.ImageFile)
+	for key, img := range imageMap {
+		parts := strings.SplitN(key, "|", 2)
+		if len(parts) == 2 && parts[0] == imageType {
+			result[parts[1]] = img
+		}
+	}
+	return result
+}
+
+// shouldSkipImageForPriority checks if an image should be skipped because a higher priority set has it
+// Returns true if the image should be skipped (higher priority set has this image)
+func shouldSkipImageForPriority(setID string, imageType string, seasonNum, episodeNum *int, priorityMap map[string][]prioritySetInfo) bool {
+	sets, ok := priorityMap[imageType]
+	if !ok {
+		return false
+	}
+
+	// Build the image key
+	key := ""
+	if seasonNum != nil {
+		key = fmt.Sprintf("%d", *seasonNum)
+		if episodeNum != nil {
+			key = fmt.Sprintf("%d:%d", *seasonNum, *episodeNum)
+		}
+	}
+
+	// Find this set's position and check if any higher priority set has this image
+	for i, setInfo := range sets {
+		if setInfo.setID == setID {
+			// Check all sets with higher priority (lower index = higher priority)
+			for j := 0; j < i; j++ {
+				if _, hasImage := sets[j].images[key]; hasImage {
+					return true // Higher priority set has this image
+				}
+			}
+			return false
+		}
+	}
+
+	return false
 }

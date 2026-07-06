@@ -22,6 +22,7 @@ var (
 	checkMediuxSiteLinkJobID             cron.EntryID = 0
 	checkForMediaItemChangesJobID        cron.EntryID = 0
 	handleTempIgnoredItemsJobID          cron.EntryID = 0
+	subscriptionCheckJobID               cron.EntryID = 0
 
 	// Configurable
 	autodownloadJobID cron.EntryID = 0
@@ -96,6 +97,8 @@ func GetListOfJobs() []JobInfo {
 				jobInfo.JobName = "Check for Media Item Changes Job"
 			case handleTempIgnoredItemsJobID:
 				jobInfo.JobName = "Handle Temp Ignored Items Job"
+			case subscriptionCheckJobID:
+				jobInfo.JobName = "Subscription Check Job"
 			default:
 				jobInfo.JobName = "Unknown Job"
 			}
@@ -125,6 +128,8 @@ func TriggerJob(jobName string, jobID string) error {
 		entryID = checkForMediaItemChangesJobID
 	case "Handle Temp Ignored Items Job":
 		entryID = handleTempIgnoredItemsJobID
+	case "Subscription Check Job":
+		entryID = subscriptionCheckJobID
 	default:
 		return fmt.Errorf("unknown job name: %s", jobName)
 	}

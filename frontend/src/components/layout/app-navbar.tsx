@@ -5,6 +5,7 @@ import {
   ArrowLeftCircle,
   ArrowRightCircle,
   Bookmark as BookmarkIcon,
+  Bell,
   Clock,
   FileCog as FileCogIcon,
   LayoutGrid,
@@ -290,6 +291,13 @@ export function Navbar({ version = "dev" }: AppNavbarProps) {
                 >
                   <ListOrdered className="w-6 h-6 mr-2" />
                   Download Queue
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
+                  onClick={() => router.push("/subscriptions")}
+                >
+                  <Bell className="w-6 h-6 mr-2" />
+                  Subscriptions
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

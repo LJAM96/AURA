@@ -498,9 +498,9 @@ func upsertSavedItemEntry(ctx context.Context, tx *sql.Tx, mediaItem models.Medi
 INSERT INTO SavedItems (
   tmdb_id, library_title, poster_set_id,
   poster_selected, backdrop_selected, season_poster_selected, special_season_poster_selected, titlecard_selected,
-	autodownload, auto_add_new_collection_items, last_downloaded
+	autodownload, auto_add_new_collection_items, priority, last_downloaded
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(tmdb_id, library_title, poster_set_id) DO UPDATE SET
   poster_selected               = excluded.poster_selected,
   backdrop_selected             = excluded.backdrop_selected,
@@ -509,6 +509,7 @@ ON CONFLICT(tmdb_id, library_title, poster_set_id) DO UPDATE SET
   titlecard_selected            = excluded.titlecard_selected,
   autodownload                  = excluded.autodownload,
 	auto_add_new_collection_items = excluded.auto_add_new_collection_items,
+  priority                      = excluded.priority,
   last_downloaded               = excluded.last_downloaded;
 `
 	_, err := tx.ExecContext(ctx, q,
@@ -522,6 +523,7 @@ ON CONFLICT(tmdb_id, library_title, poster_set_id) DO UPDATE SET
 		boolToInt(ps.SelectedTypes.Titlecard),
 		boolToInt(ps.AutoDownload),
 		boolToInt(ps.AutoAddNewCollectionItems),
+		ps.Priority,
 		ps.LastDownloaded,
 	)
 	if err != nil {
@@ -568,6 +570,7 @@ ON CONFLICT(poster_set_id, image_id, item_tmdb_id) DO UPDATE SET
 
 func clearSelectedTypesOnOtherSets(ctx context.Context, tx *sql.Tx, tmdbID, libraryTitle string, owner map[string]string) (Err logging.LogErrorInfo) {
 	// For each type, find owner poster_set_id, then clear that type on all other sets for this item
+	// IMPORTANT: Skip subscription sets (auto_download = 1) - they keep their types for priority fallback
 	type col struct {
 		key string
 		sql string
@@ -594,13 +597,18 @@ func clearSelectedTypesOnOtherSets(ctx context.Context, tx *sql.Tx, tmdbID, libr
 			return logging.LogErrorInfo{Message: "DB: lookup owner poster set id failed", Detail: map[string]any{"error": err.Error(), "set_id": ownerSetID}}
 		}
 
+		// Skip clearing types on subscription sets (auto_download = 1) - they keep their types for priority fallback
 		q := fmt.Sprintf(`
 UPDATE SavedItems
 SET %s = 0
-WHERE tmdb_id = ? AND library_title = ? AND poster_set_id != ?;
+WHERE tmdb_id = ? AND library_title = ? AND poster_set_id != ?
+  AND poster_set_id NOT IN (
+    SELECT si2.poster_set_id FROM SavedItems si2
+    WHERE si2.tmdb_id = ? AND si2.library_title = ? AND si2.autodownload = 1
+  );
 `, c.sql)
 
-		if _, err := tx.ExecContext(ctx, q, tmdbID, libraryTitle, ownerPosterSetRowID); err != nil {
+		if _, err := tx.ExecContext(ctx, q, tmdbID, libraryTitle, ownerPosterSetRowID, tmdbID, libraryTitle); err != nil {
 			return logging.LogErrorInfo{Message: "DB: clear selected types failed", Detail: map[string]any{"error": err.Error(), "type": c.key}}
 		}
 	}
@@ -691,6 +699,7 @@ WHERE id NOT IN (SELECT DISTINCT poster_set_id FROM SavedItems);
 }
 
 // Change deleteEmptySavedItemLinks to return rows deleted so caller can log it.
+// IMPORTANT: Skip subscription sets (auto_download = 1) - they keep their types for priority fallback
 func deleteEmptySavedItemLinks(ctx context.Context, tx *sql.Tx, tmdbID, libraryTitle string) (deleted int64, Err logging.LogErrorInfo) {
 	q := `
 DELETE FROM SavedItems
@@ -699,7 +708,8 @@ WHERE tmdb_id = ? AND library_title = ?
   AND backdrop_selected = 0
   AND season_poster_selected = 0
   AND special_season_poster_selected = 0
-  AND titlecard_selected = 0;
+  AND titlecard_selected = 0
+  AND autodownload = 0;
 `
 	res, err := tx.ExecContext(ctx, q, tmdbID, libraryTitle)
 	if err != nil {

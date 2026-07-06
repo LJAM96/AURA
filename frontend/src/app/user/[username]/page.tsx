@@ -22,6 +22,7 @@ import Loader from "@/components/shared/loader";
 import { ResponsiveGrid } from "@/components/shared/responsive-grid";
 import { SelectItemsPerPage } from "@/components/shared/select-items-per-page";
 import { SortControl } from "@/components/shared/select-sort";
+import { SubscriptionModal } from "@/components/shared/subscription-modal";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -32,6 +33,7 @@ import { Lead, P } from "@/components/ui/typography";
 import { log } from "@/lib/logger";
 import { useLibrarySectionsStore } from "@/lib/stores/global-store-library-sections";
 import { useSearchQueryStore } from "@/lib/stores/global-store-search-query";
+import { useSubscriptionStore } from "@/lib/stores/global-store-subscriptions";
 import { useUserPageStore } from "@/lib/stores/page-store-user";
 
 import type { APIResponse } from "@/types/api/api-response";
@@ -762,6 +764,11 @@ const UserSetPage = () => {
             </AvatarFallback>
           </Avatar>
         </h1>
+        <SubscriptionModal
+          username={username}
+          existingSubscription={useSubscriptionStore.getState().getSubscriptionByUsername(username)}
+          triggerClassName="mt-2"
+        />
       </div>
 
       {/* Show loading message */}

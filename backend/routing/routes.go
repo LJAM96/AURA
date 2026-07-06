@@ -18,6 +18,7 @@ import (
 	"aura/routing/middleware"
 	routes_search "aura/routing/search"
 	routes_sonarr_radarr "aura/routing/sonarr-radarr"
+	routes_subscriptions "aura/routing/subscriptions"
 	routes_validation "aura/routing/validation"
 	"aura/utils/httpx"
 	"net/http"
@@ -152,6 +153,15 @@ func AddRoutes(r *chi.Mux) {
 				r.Get("/set", routes_mediux.GetSetByID)
 				r.Get("/sets/item", routes_mediux.GetItemSets)
 				r.Get("/sets/user", routes_mediux.GetAllUserSets)
+			})
+
+			// Subscriptions Routes
+			r.Route("/subscriptions", func(r chi.Router) {
+				r.Get("/", routes_subscriptions.GetAllSubscriptions)
+				r.Get("/username", routes_subscriptions.GetSubscriptionByUsername)
+				r.Post("/", routes_subscriptions.CreateSubscription)
+				r.Put("/{id}", routes_subscriptions.UpdateSubscription)
+				r.Delete("/{id}", routes_subscriptions.DeleteSubscription)
 			})
 
 			// Validation Routes

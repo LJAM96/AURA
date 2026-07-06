@@ -22,6 +22,7 @@ func (s *SQliteDB) CreateTables(ctx context.Context) (Err logging.LogErrorInfo) 
 		v2_CreateImageFilesTable,
 		v2_CreateSavedItemsTable,
 		v2_CreateIgnoredItemsTable,
+		v6_CreateUserSubscriptionsTable,
 		v2_AddIndexesToNewTables,
 	}
 
@@ -273,6 +274,7 @@ CREATE TABLE SavedItems (
 
     autodownload INTEGER NOT NULL DEFAULT 0 CHECK (autodownload IN (0,1)),
 	auto_add_new_collection_items INTEGER NOT NULL DEFAULT 0 CHECK (auto_add_new_collection_items IN (0,1)),
+    priority INTEGER NOT NULL DEFAULT 0,
     last_downloaded DATETIME NOT NULL,
 
     PRIMARY KEY (tmdb_id, library_title, poster_set_id),
@@ -349,10 +351,45 @@ CREATE INDEX idx_saveditems_poster_set_id ON SavedItems(poster_set_id);
 CREATE INDEX idx_saveditems_item ON SavedItems(tmdb_id, library_title);
 
 CREATE INDEX idx_ignoreditems_mode ON IgnoredItems(mode);
+
+CREATE INDEX idx_usersubscriptions_username ON UserSubscriptions(username);
+CREATE INDEX idx_usersubscriptions_enabled ON UserSubscriptions(enabled);
     `
 	_, err := conn.ExecContext(ctx, query)
 	if err != nil {
 		logAction.SetError("Failed to add indexes to new tables", err.Error(), map[string]any{
+			"error": err.Error(),
+			"query": query,
+		})
+		return *logAction.Error
+	}
+
+	return Err
+}
+
+func v6_CreateUserSubscriptionsTable(ctx context.Context, conn *sql.DB) (Err logging.LogErrorInfo) {
+	ctx, logAction := logging.AddSubActionToContext(ctx, "Creating UserSubscriptions Table", logging.LevelTrace)
+	defer logAction.Complete()
+	Err = logging.LogErrorInfo{}
+
+	query := `
+CREATE TABLE IF NOT EXISTS UserSubscriptions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    username        TEXT NOT NULL,
+    creator_id      TEXT NOT NULL DEFAULT '',
+    image_types     TEXT NOT NULL DEFAULT '{"poster":false,"backdrop":false,"season_poster":false,"special_season_poster":false,"titlecard":false}',
+    priority        INTEGER NOT NULL DEFAULT 1,
+    media_scope     TEXT NOT NULL DEFAULT 'all' CHECK (media_scope IN ('all','movies','shows','collections')),
+    library_section TEXT,
+    enabled         INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
+    date_created    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    date_updated    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(username)
+);
+`
+	_, err := conn.ExecContext(ctx, query)
+	if err != nil {
+		logAction.SetError("Failed to create UserSubscriptions table", err.Error(), map[string]any{
 			"error": err.Error(),
 			"query": query,
 		})

@@ -34,6 +34,28 @@ func handleMovie(ctx context.Context, mediaItem models.MediaItem, dbItem models.
 		}
 	}()
 
+	// Pre-fetch all MediUX sets for priority-based fallback logic
+	allMediuxSets := make(map[string]models.PosterSet)
+	for _, dbSet := range dbItem.PosterSets {
+		if !dbSet.AutoDownload {
+			continue
+		}
+		var mediuxSet models.SetRef
+		var fetchErr logging.LogErrorInfo
+		switch dbSet.Type {
+		case "movie":
+			mediuxSet, _, fetchErr = mediux.GetMovieSetByID(ctx, dbSet.ID, mediaItem.LibraryTitle)
+		case "collection":
+			mediuxSet, _, fetchErr = mediux.GetMovieCollectionSetByID(ctx, dbSet.ID, mediaItem.TMDB_ID, mediaItem.LibraryTitle, false)
+		}
+		if fetchErr.Message == "" && mediuxSet.ID == dbSet.ID {
+			allMediuxSets[dbSet.ID] = mediuxSet.PosterSet
+		}
+	}
+
+	// Build priority map for subscription fallback logic (uses both DB images and MediUX images)
+	priorityMap := buildPriorityMap(dbItem, allMediuxSets)
+
 	// Indicators that something has changed with the media item
 	// If any of these are true, we will redownload the selected types for each set
 	// If none of these are true, we will compare get the latest set and check the dates to see if there has been an update to an image
@@ -183,6 +205,13 @@ func handleMovie(ctx context.Context, mediaItem models.MediaItem, dbItem models.
 				continue
 			} else if image.ItemTMDB_ID != mediaItem.TMDB_ID {
 				// We don't log this as its not needed
+				continue
+			}
+
+			// Check if a higher priority set has this image (subscription fallback)
+			if shouldSkipImageForPriority(dbSet.ID, image.Type, image.SeasonNumber, image.EpisodeNumber, priorityMap) {
+				check.Reason = fmt.Sprintf("Higher priority subscription has this %s", image.Type)
+				actionImageChecks.AppendResult(imageName, check)
 				continue
 			}
 
