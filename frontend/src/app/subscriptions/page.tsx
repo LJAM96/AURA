@@ -2,7 +2,8 @@
 
 import { GetAllSubscriptions } from "@/services/subscriptions/get-subscriptions";
 import { formatLastUpdatedDate } from "@/helper/format-date-last-updates";
-import { Bell, BellOff, Loader, Settings, Trash2 } from "lucide-react";
+import Loader from "@/components/shared/loader";
+import { Bell, BellOff, Settings, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
