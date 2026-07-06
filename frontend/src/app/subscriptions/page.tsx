@@ -175,7 +175,7 @@ export default function SubscriptionsPage() {
                     </div>
                   </div>
                   <div className="text-muted-foreground text-xs pt-2">
-                    Subscribed {formatLastUpdatedDate(sub.date_created)}
+                    Subscribed {formatLastUpdatedDate(sub.date_created, sub.date_created)}
                   </div>
                 </div>
               </CardContent>
