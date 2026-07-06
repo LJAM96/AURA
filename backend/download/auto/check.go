@@ -288,6 +288,7 @@ func insertRedownloadedSetIntoDB(ctx context.Context, newMediaItem models.MediaI
 		AutoDownload:              dbSet.AutoDownload,
 		AutoAddNewCollectionItems: dbSet.AutoAddNewCollectionItems,
 		ToDelete:                  false,
+		Priority:                  dbSet.Priority,
 	}
 	var found bool
 	found, dbItem.PosterSets = utils.UpdatePosterSetInDBItem(dbItem.PosterSets, newSetInfo)

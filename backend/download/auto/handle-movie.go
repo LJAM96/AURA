@@ -232,7 +232,7 @@ func handleMovie(ctx context.Context, mediaItem models.MediaItem, dbItem models.
 			if !handled {
 				checkImageDates(image, &dbSet, oldImageByKey, &imagesToRedownload, &check)
 			}
-			actionCheckChanges.AppendResult(imageName, check)
+				actionImageChecks.AppendResult(imageName, check)
 		}
 		actionCheckChanges.AppendResult("images_to_redownload_count", len(imagesToRedownload))
 		actionCheckChanges.Complete()
@@ -428,16 +428,17 @@ func handleCollectionAutoAddNewItems(ctx context.Context, dbSet models.DBPosterS
 						},
 						Images: itemImages,
 					},
-					LastDownloaded:            time.Now(),
-					SelectedTypes:             dbSet.SelectedTypes,
-					AutoDownload:              dbSet.AutoDownload,
-					AutoAddNewCollectionItems: dbSet.AutoAddNewCollectionItems,
-					ToDelete:                  false,
-				},
+				LastDownloaded:            time.Now(),
+				SelectedTypes:             dbSet.SelectedTypes,
+				AutoDownload:              dbSet.AutoDownload,
+				AutoAddNewCollectionItems: dbSet.AutoAddNewCollectionItems,
+				ToDelete:                  false,
+				Priority:                  dbSet.Priority,
 			},
-		}
+		},
+	}
 
-		upsertErr := database.UpsertSavedItem(ctx, newSavedItem)
+	upsertErr := database.UpsertSavedItem(ctx, newSavedItem)
 		if upsertErr.Message != "" {
 			action.AppendWarning("collection_auto_add_db_upsert_failed", map[string]any{
 				"tmdb_id":       item.TMDB_ID,
