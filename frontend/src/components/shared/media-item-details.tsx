@@ -55,6 +55,7 @@ type MediaItemDetailsProps = {
   ignoredInDB?: boolean;
   ignoredMode?: string;
   currentSetsAvailable?: string[];
+  imageVersion?: number;
 };
 
 export function MediaItemDetails({
@@ -67,6 +68,7 @@ export function MediaItemDetails({
   ignoredInDB,
   ignoredMode,
   currentSetsAvailable = [],
+  imageVersion,
 }: MediaItemDetailsProps) {
   const [isInDBLocal, setIsInDBLocal] = useState(existsInDB);
   const [isIgnoredLocal, setIsIgnoredLocal] = useState(ignoredInDB);
@@ -198,7 +200,7 @@ export function MediaItemDetails({
             }}
           >
             <AssetImage
-              image={`/api/images/media/item?rating_key=${mediaItem?.rating_key}&image_rating_key=${posterImageKeys[currentPosterIndex]}&image_type=poster&cb=${Date.now()}`}
+              image={`/api/images/media/item?rating_key=${mediaItem?.rating_key}&image_rating_key=${posterImageKeys[currentPosterIndex]}&image_type=poster&cb=${imageVersion ?? Date.now()}`}
               imageType="url"
               className="w-[200px] h-auto transition-transform hover:scale-105 select-none"
             />
