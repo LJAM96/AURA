@@ -765,8 +765,8 @@ const UserSetPage = () => {
           </Avatar>
         </h1>
         <SubscriptionModal
-          username={username}
-          existingSubscription={useSubscriptionStore.getState().getSubscriptionByUsername(username)}
+          username={username as string}
+          existingSubscription={useSubscriptionStore.getState().getSubscriptionByUsername(username as string)}
           triggerClassName="mt-2"
         />
       </div>
