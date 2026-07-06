@@ -4,6 +4,7 @@ import (
 	"aura/cache"
 	"aura/database"
 	"aura/logging"
+	"aura/mediux"
 	"aura/models"
 	"aura/utils"
 	"context"
@@ -221,5 +222,5 @@ func CheckSubscriptionForNewSet(ctx context.Context, setID int, creatorUsername 
 		Msg("Subscription match found for updated set")
 
 	// Process the set
-	_ = processSubscriptionSet(ctx, sub, set, setTMDBID, set.Type)
+	_ = processSubscriptionSet(ctx, *sub, set, setTMDBID, set.Type)
 }
