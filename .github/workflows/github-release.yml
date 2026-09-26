@@ -1,0 +1,60 @@
+name: Create GitHub Release
+
+on:
+    workflow_dispatch:
+        inputs:
+            version:
+                description: "Version to release (e.g. v0.9.101). Defaults to the contents of VERSION.txt."
+                required: false
+                type: string
+            draft:
+                description: "Create as a draft release (uncheck the box to publish immediately)"
+                required: false
+                type: boolean
+                default: true
+
+jobs:
+    github-release:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v7
+
+            - name: Resolve version
+              run: |
+                  if [[ -n "${{ inputs.version }}" ]]; then
+                    echo "APP_VERSION=${{ inputs.version }}" >> $GITHUB_ENV
+                  else
+                    echo "APP_VERSION=$(cat VERSION.txt)" >> $GITHUB_ENV
+                  fi
+
+            - name: Extract changelog section
+              run: |
+                  python3 - <<'PY'
+                  import os, re, pathlib
+
+                  version = os.environ["APP_VERSION"].lstrip("v")
+                  text = pathlib.Path("frontend/public/CHANGELOG.md").read_text()
+                  pattern = re.compile(
+                      r"^##\s*\[" + re.escape(version) + r"\].*?\n(.*?)(?=^## \[|\Z)",
+                      re.S | re.M,
+                  )
+                  match = pattern.search(text)
+                  if not match:
+                      raise SystemExit(f"No CHANGELOG.md section found for version [{version}]")
+                  body = match.group(1).strip()
+                  body = re.sub(r"\n-{3,}\s*$", "", body).strip()
+                  pathlib.Path("release_notes.md").write_text(body + "\n")
+                  PY
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ env.APP_VERSION }}
+                  name: ${{ env.APP_VERSION }}
+                  target_commitish: ${{ github.sha }}
+                  body_path: release_notes.md
+                  draft: ${{ inputs.draft }}

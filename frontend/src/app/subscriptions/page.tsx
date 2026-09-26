@@ -4,7 +4,7 @@ import { GetAllSubscriptions } from "@/services/subscriptions/get-subscriptions"
 import { formatLastUpdatedDate } from "@/helper/format-date-last-updates";
 import Loader from "@/components/shared/loader";
 import { Bell, BellOff, Settings, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { SubscriptionModal } from "@/components/shared/subscription-modal";
@@ -17,7 +17,6 @@ import { DeleteSubscription } from "@/services/subscriptions/delete-subscription
 import { useSubscriptionStore } from "@/lib/stores/global-store-subscriptions";
 
 import type { UserSubscription } from "@/types/subscriptions/subscription";
-import { DOWNLOAD_IMAGE_TYPE_OPTIONS } from "@/types/ui-options";
 import { MEDIA_SCOPE_OPTIONS } from "@/types/subscriptions/subscription";
 
 export default function SubscriptionsPage() {
@@ -25,11 +24,7 @@ export default function SubscriptionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchSubscriptions();
-  }, []);
-
-  const fetchSubscriptions = async () => {
+  const fetchSubscriptions = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -44,7 +39,11 @@ export default function SubscriptionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [setSubscriptions]);
+
+  useEffect(() => {
+    fetchSubscriptions();
+  }, [fetchSubscriptions]);
 
   const handleDelete = async (sub: UserSubscription) => {
     try {

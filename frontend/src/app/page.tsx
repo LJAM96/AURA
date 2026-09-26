@@ -82,19 +82,21 @@ export default function Home() {
   );
   const totalPages = Math.ceil(filteredAndSortedMediaItems.length / itemsPerPage);
 
-  const dedupeMediaItemsByTmdbId = useCallback((items: LibrarySection["media_items"]) => {
-    const seenTmdbIds = new Set<string>();
+  // Dedupes by TMDB ID + Edition, so multiple editions of the same TMDB item
+  // (e.g. Theatrical vs Director's Cut) are kept as distinct entries.
+  const dedupeMediaItemsByTmdbIdAndEdition = useCallback((items: LibrarySection["media_items"]) => {
+    const seenKeys = new Set<string>();
     return items.filter((item) => {
       if (item.tmdb_id === null || item.tmdb_id === undefined || item.tmdb_id === "") {
         return true;
       }
 
-      const tmdbId = String(item.tmdb_id);
-      if (seenTmdbIds.has(tmdbId)) {
+      const key = `${String(item.tmdb_id)}|${item.edition || ""}`;
+      if (seenKeys.has(key)) {
         return false;
       }
 
-      seenTmdbIds.add(tmdbId);
+      seenKeys.add(key);
       return true;
     });
   }, []);
@@ -199,7 +201,7 @@ export default function Home() {
                 break;
               }
             }
-            const deduplicatedItems = dedupeMediaItemsByTmdbId(allItems);
+            const deduplicatedItems = dedupeMediaItemsByTmdbIdAndEdition(allItems);
 
             section.media_items = deduplicatedItems;
             section.total_size = deduplicatedItems.length;
@@ -226,7 +228,7 @@ export default function Home() {
         isMounted.current = false;
       }
     },
-    [dedupeMediaItemsByTmdbId, sections, setSections, timestamp]
+    [dedupeMediaItemsByTmdbIdAndEdition, sections, setSections, timestamp]
   );
 
   useEffect(() => {

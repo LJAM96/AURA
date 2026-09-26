@@ -32,7 +32,7 @@ import { UpdateSubscription } from "@/services/subscriptions/update-subscription
 
 import type { SelectedTypes } from "@/types/media-and-posters/media-item-and-library";
 import { DOWNLOAD_IMAGE_TYPE_OPTIONS, TYPE_DOWNLOAD_IMAGE_TYPE_OPTIONS } from "@/types/ui-options";
-import type { CreateSubscriptionRequest, UserSubscription, TYPE_MEDIA_SCOPE_OPTIONS, TYPE_PRIORITY_OPTIONS } from "@/types/subscriptions/subscription";
+import type { CreateSubscriptionRequest, UserSubscription, TYPE_PRIORITY_OPTIONS } from "@/types/subscriptions/subscription";
 import { PRIORITY_OPTIONS } from "@/types/subscriptions/subscription";
 
 interface SubscriptionModalProps {

@@ -41,7 +41,7 @@ func (p *Plex) DownloadApplyImageToMediaItem(ctx context.Context, item *models.M
 	// Get the Image from MediUX
 	// mediux.GetImage will handle checking the temp folder and caching based on config
 	formatDate := imageFile.Modified.Format("20060102150405")
-	imageData, _, Err := mediux.GetImage(ctx, imageFile.ID, formatDate, mediux.ImageQualityOriginal)
+	imageData, imageType, Err := mediux.GetImage(ctx, imageFile.ID, formatDate, mediux.ImageQualityOriginal)
 	if Err.Message != "" {
 		return Err
 	}
@@ -55,7 +55,7 @@ func (p *Plex) DownloadApplyImageToMediaItem(ctx context.Context, item *models.M
 	// }
 
 	// Save the Image Locally
-	_, Err = saveImageLocally(ctx, p, item, imageFile, imageData)
+	_, Err = saveImageLocally(ctx, p, item, imageFile, imageData, imageType)
 	if Err.Message != "" {
 		return Err
 	}
@@ -106,7 +106,7 @@ func (p *Plex) DownloadApplyImageToMediaItem(ctx context.Context, item *models.M
 	// return Err
 }
 
-func saveImageLocally(ctx context.Context, p *Plex, item *models.MediaItem, imageFile models.ImageFile, imageData []byte) (isCustomLocalPath bool, Err logging.LogErrorInfo) {
+func saveImageLocally(ctx context.Context, p *Plex, item *models.MediaItem, imageFile models.ImageFile, imageData []byte, imageType string) (isCustomLocalPath bool, Err logging.LogErrorInfo) {
 	ctx, logAction := logging.AddSubActionToContext(ctx, fmt.Sprintf(
 		"Plex: Saving %s Image for %s",
 		utils.GetFileDownloadName(item.Title, imageFile), utils.MediaItemInfo(*item),
@@ -115,6 +115,10 @@ func saveImageLocally(ctx context.Context, p *Plex, item *models.MediaItem, imag
 
 	isCustomLocalPath = false
 	Err = logging.LogErrorInfo{}
+
+	// The image extension must match the actual downloaded content type
+	// (MediUX images may be JPEG, PNG, WEBP, or GIF), not be assumed as JPEG
+	ext := utils.GetExtensionFromContentType(imageType)
 
 	newFilePath := ""
 	newFileName := ""
@@ -136,9 +140,9 @@ func saveImageLocally(ctx context.Context, p *Plex, item *models.MediaItem, imag
 		getFilePathAction.AppendResult("movie_file_path", newFilePath)
 		switch imageFile.Type {
 		case "poster":
-			newFileName = "poster.jpg"
+			newFileName = "poster" + ext
 		case "backdrop":
-			newFileName = "backdrop.jpg"
+			newFileName = "backdrop" + ext
 		}
 	case "show":
 		// Handle show-specific logic
@@ -146,14 +150,14 @@ func saveImageLocally(ctx context.Context, p *Plex, item *models.MediaItem, imag
 		getFilePathAction.AppendResult("series_location", newFilePath)
 		switch imageFile.Type {
 		case "poster":
-			newFileName = "poster.jpg"
+			newFileName = "poster" + ext
 		case "backdrop":
-			newFileName = "backdrop.jpg"
+			newFileName = "backdrop" + ext
 		case "season_poster":
 			seasonNumber := utils.FormatIntAsTwoDigitString(*imageFile.SeasonNumber)
-			newFileName = fmt.Sprintf("season%s-poster.jpg", seasonNumber)
+			newFileName = fmt.Sprintf("season%s-poster%s", seasonNumber, ext)
 		case "special_season_poster":
-			newFileName = "season-specials-poster.jpg"
+			newFileName = "season-specials-poster" + ext
 		case "titlecard":
 			episodeNamingConvention := config.Current.Images.SaveImagesLocally.EpisodeNamingConvention
 			// For titlecards, get the file path from Plex
@@ -164,17 +168,17 @@ func saveImageLocally(ctx context.Context, p *Plex, item *models.MediaItem, imag
 				switch episodeNamingConvention {
 				case "match":
 					newFileName = path.Base(episodePath)
-					newFileName = newFileName[:len(newFileName)-len(path.Ext(newFileName))] + "-thumb.jpg"
+					newFileName = newFileName[:len(newFileName)-len(path.Ext(newFileName))] + "-thumb" + ext
 				case "static":
 					filename := path.Base(episodePath)
 					re := regexp.MustCompile(`(?i)\bS?\d{1,3}[Ex]\d{1,3}\b`)
 					trimmed := strings.TrimSuffix(filename, path.Ext(filename))
 					matchedString := re.FindString(trimmed)
 					if matchedString != "" {
-						newFileName = matchedString + ".jpg"
+						newFileName = matchedString + ext
 					} else {
 						// If we failed to get the season and episode numbers, try and get them from the file struct
-						newFileName = fmt.Sprintf("S%02dE%02d.jpg", imageFile.SeasonNumber, imageFile.EpisodeNumber)
+						newFileName = fmt.Sprintf("S%02dE%02d%s", imageFile.SeasonNumber, imageFile.EpisodeNumber, ext)
 					}
 				default:
 					getFilePathAction.SetError("Invalid Episode Naming Convention",

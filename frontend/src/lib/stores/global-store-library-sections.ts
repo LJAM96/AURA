@@ -11,26 +11,30 @@ import type { LibrarySection, MediaItem, SelectedTypes } from "@/types/media-and
 // Max Cache Duration: 1 Hour
 export const MAX_CACHE_DURATION = 60 * 60 * 1000;
 
-const dedupeMediaItemsByTmdbID = (mediaItems: LibrarySection["media_items"]): LibrarySection["media_items"] => {
-  const seenTmdbIDs = new Set<string>();
+// Dedupes by TMDB ID + Edition, so multiple editions of the same TMDB item
+// (e.g. Theatrical vs Director's Cut) are kept as distinct entries.
+const dedupeMediaItemsByTmdbIDAndEdition = (
+  mediaItems: LibrarySection["media_items"]
+): LibrarySection["media_items"] => {
+  const seenKeys = new Set<string>();
 
   return mediaItems.filter((item) => {
     if (item.tmdb_id === null || item.tmdb_id === undefined || item.tmdb_id === "") {
       return true;
     }
 
-    const tmdbID = String(item.tmdb_id);
-    if (seenTmdbIDs.has(tmdbID)) {
+    const key = `${String(item.tmdb_id)}|${item.edition || ""}`;
+    if (seenKeys.has(key)) {
       return false;
     }
 
-    seenTmdbIDs.add(tmdbID);
+    seenKeys.add(key);
     return true;
   });
 };
 
 const sanitizeSection = (section: LibrarySection): LibrarySection => {
-  const deduplicatedMediaItems = dedupeMediaItemsByTmdbID(section.media_items || []);
+  const deduplicatedMediaItems = dedupeMediaItemsByTmdbIDAndEdition(section.media_items || []);
 
   return {
     ...section,
@@ -63,6 +67,7 @@ interface LibrarySectionsStore {
   upsertMediaItemSavedSet: (args: {
     tmdbID: string;
     libraryTitle: string;
+    edition?: string;
     setID: string;
     setUser: string;
     selectedTypes: SelectedTypes;
@@ -70,9 +75,15 @@ interface LibrarySectionsStore {
   }) => void;
 
   /** Clear db_saved_sets (e.g. after deleting entire item from DB). */
-  clearMediaItemSavedSets: (args: { tmdbID: string; libraryTitle: string }) => void;
+  clearMediaItemSavedSets: (args: { tmdbID: string; libraryTitle: string; edition?: string }) => void;
 
-  updateIgnoreStatus: (tmdbID: string, libraryTitle: string, ignored: boolean, ignoreMode: string) => void;
+  updateIgnoreStatus: (
+    tmdbID: string,
+    libraryTitle: string,
+    ignored: boolean,
+    ignoreMode: string,
+    edition?: string
+  ) => void;
 
   getSectionSummaries: () => { title: string; type: string }[];
 
@@ -125,7 +136,9 @@ export const useLibrarySectionsStore = create<LibrarySectionsStore>()(
         }
 
         const mediaItems = [...section.media_items];
-        const idx = mediaItems.findIndex((m) => m.tmdb_id === mediaItem.tmdb_id);
+        const idx = mediaItems.findIndex(
+          (m) => m.tmdb_id === mediaItem.tmdb_id && (m.edition || "") === (mediaItem.edition || "")
+        );
         if (idx === -1) {
           log(
             "ERROR",
@@ -153,7 +166,8 @@ export const useLibrarySectionsStore = create<LibrarySectionsStore>()(
         };
         if (
           mediaState.mediaItem?.tmdb_id === mediaItem.tmdb_id &&
-          mediaState.mediaItem?.library_title === mediaItem.library_title
+          mediaState.mediaItem?.library_title === mediaItem.library_title &&
+          (mediaState.mediaItem?.edition || "") === (mediaItem.edition || "")
         ) {
           mediaState.setMediaItem(mediaItems[idx]);
         }
@@ -166,7 +180,15 @@ export const useLibrarySectionsStore = create<LibrarySectionsStore>()(
         );
       },
 
-      upsertMediaItemSavedSet: ({ tmdbID, libraryTitle, setID, setUser, selectedTypes, toDelete = false }) => {
+      upsertMediaItemSavedSet: ({
+        tmdbID,
+        libraryTitle,
+        edition = "",
+        setID,
+        setUser,
+        selectedTypes,
+        toDelete = false,
+      }) => {
         const { sections } = get();
         const section = sections[libraryTitle];
         if (!section || !Array.isArray(section.media_items)) {
@@ -180,7 +202,7 @@ export const useLibrarySectionsStore = create<LibrarySectionsStore>()(
         }
 
         const mediaItems = [...section.media_items];
-        const idx = mediaItems.findIndex((m) => m.tmdb_id === tmdbID);
+        const idx = mediaItems.findIndex((m) => m.tmdb_id === tmdbID && (m.edition || "") === edition);
         if (idx === -1) {
           log(
             "ERROR",
@@ -208,12 +230,16 @@ export const useLibrarySectionsStore = create<LibrarySectionsStore>()(
           mediaItem?: MediaItem;
           setMediaItem: (m: MediaItem) => void;
         };
-        if (mediaState.mediaItem?.tmdb_id === tmdbID && mediaState.mediaItem?.library_title === libraryTitle) {
+        if (
+          mediaState.mediaItem?.tmdb_id === tmdbID &&
+          mediaState.mediaItem?.library_title === libraryTitle &&
+          (mediaState.mediaItem?.edition || "") === edition
+        ) {
           mediaState.setMediaItem(mediaItems[idx]);
         }
       },
 
-      clearMediaItemSavedSets: ({ tmdbID, libraryTitle }) => {
+      clearMediaItemSavedSets: ({ tmdbID, libraryTitle, edition = "" }) => {
         const { sections } = get();
         const section = sections[libraryTitle];
         if (!section || !Array.isArray(section.media_items)) {
@@ -227,7 +253,7 @@ export const useLibrarySectionsStore = create<LibrarySectionsStore>()(
         }
 
         const mediaItems = [...section.media_items];
-        const idx = mediaItems.findIndex((m) => m.tmdb_id === tmdbID);
+        const idx = mediaItems.findIndex((m) => m.tmdb_id === tmdbID && (m.edition || "") === edition);
         if (idx === -1) {
           log(
             "ERROR",
@@ -251,12 +277,16 @@ export const useLibrarySectionsStore = create<LibrarySectionsStore>()(
           mediaItem?: MediaItem;
           setMediaItem: (m: MediaItem) => void;
         };
-        if (mediaState.mediaItem?.tmdb_id === tmdbID && mediaState.mediaItem?.library_title === libraryTitle) {
+        if (
+          mediaState.mediaItem?.tmdb_id === tmdbID &&
+          mediaState.mediaItem?.library_title === libraryTitle &&
+          (mediaState.mediaItem?.edition || "") === edition
+        ) {
           mediaState.setMediaItem(mediaItems[idx]);
         }
       },
 
-      updateIgnoreStatus: (tmdbID, libraryTitle, ignored, ignoreMode) => {
+      updateIgnoreStatus: (tmdbID, libraryTitle, ignored, ignoreMode, edition = "") => {
         const { sections } = get();
         const section = sections[libraryTitle];
         if (!section || !Array.isArray(section.media_items)) {
@@ -270,7 +300,7 @@ export const useLibrarySectionsStore = create<LibrarySectionsStore>()(
         }
 
         const mediaItems = [...section.media_items];
-        const idx = mediaItems.findIndex((m) => m.tmdb_id === tmdbID);
+        const idx = mediaItems.findIndex((m) => m.tmdb_id === tmdbID && (m.edition || "") === edition);
         if (idx === -1) {
           log(
             "ERROR",

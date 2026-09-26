@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -32,9 +33,9 @@ func GetImage(ctx context.Context, assetID string, formatDate string, imageQuali
 		folderPath = ThumbsTempImageFolder
 	}
 
-	// File Name and Path
-	fileName := fmt.Sprintf("%s_%s.jpg", assetID, formatDate)
-	filePath := path.Join(folderPath, fileName)
+	// File Name Base (extension is determined by the actual image content type,
+	// since MediUX images may be JPEG, PNG, WEBP, or GIF)
+	fileNameBase := fmt.Sprintf("%s_%s", assetID, formatDate)
 	isNewDownload := false
 
 	// Run this after the function completes
@@ -63,6 +64,8 @@ func GetImage(ctx context.Context, assetID string, formatDate string, imageQuali
 			}
 
 			writeToFileAction := logAction.AddSubAction("Write Image to Temp Folder", logging.LevelTrace)
+			fileName := fileNameBase + utils.GetExtensionFromContentType(imageType)
+			filePath := path.Join(folderPath, fileName)
 			err := os.WriteFile(filePath, imageData, 0644)
 			if err != nil {
 				logAction.SetError("Failed to write image to MediUX thumbs temp image folder",
@@ -94,9 +97,11 @@ func GetImage(ctx context.Context, assetID string, formatDate string, imageQuali
 			// If the folder creation fails, we log the error but continue to fetch the image from MediUX
 			logging.LOGGER.Warn().Timestamp().Str("folder_path", folderPath).Str("error", Err.Message).Msg("Failed to create MediUX image folder, will attempt to fetch image from MediUX")
 		} else {
-			// Check if the file exists
-			fileExists := utils.CheckFileExists(filePath)
-			if fileExists {
+			// Check if a cached file exists for this asset, regardless of its extension,
+			// since the extension depends on the actual image content type (jpg/png/webp/gif)
+			matches, _ := filepath.Glob(path.Join(folderPath, fileNameBase+".*"))
+			if len(matches) > 0 {
+				filePath := matches[0]
 				// Read the image data from disk
 				imageData, err := os.ReadFile(filePath)
 				if err != nil {
@@ -105,11 +110,11 @@ func GetImage(ctx context.Context, assetID string, formatDate string, imageQuali
 					// Successfully read the image from disk
 					imageType = "image/jpeg" // Assuming JPEG by default
 					switch path.Ext(filePath) {
-					case ".png":
+					case ".png", ".PNG":
 						imageType = "image/png"
-					case ".gif":
+					case ".gif", ".GIF":
 						imageType = "image/gif"
-					case ".webp":
+					case ".webp", ".WEBP":
 						imageType = "image/webp"
 					}
 					logAction.AppendResult("filePath", filePath)

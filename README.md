@@ -49,6 +49,8 @@ To get started with aura:
 
 > Visit the [Docs](https://mediux-team.github.io/AURA/) for detailed steps.
 
+> **Note:** In order to get an API token for testing, please join the Discord below. Once you have joined, make your way to repo-chats > mediux-team/aura. There is a pinned message that contains a shared token you can use for testing. Once the new MediUX site is live, you will be able to have your own token.
+
 ---
 
 ## Join the Community

@@ -44,9 +44,9 @@ func handleMovie(ctx context.Context, mediaItem models.MediaItem, dbItem models.
 		var fetchErr logging.LogErrorInfo
 		switch dbSet.Type {
 		case "movie":
-			mediuxSet, _, fetchErr = mediux.GetMovieSetByID(ctx, dbSet.ID, mediaItem.LibraryTitle)
+			mediuxSet, _, fetchErr = mediux.GetMovieSetByID(ctx, dbSet.ID, mediaItem.LibraryTitle, mediaItem.Edition)
 		case "collection":
-			mediuxSet, _, fetchErr = mediux.GetMovieCollectionSetByID(ctx, dbSet.ID, mediaItem.TMDB_ID, mediaItem.LibraryTitle, false)
+			mediuxSet, _, fetchErr = mediux.GetMovieCollectionSetByID(ctx, dbSet.ID, mediaItem.TMDB_ID, mediaItem.LibraryTitle, mediaItem.Edition, false)
 		}
 		if fetchErr.Message == "" && mediuxSet.ID == dbSet.ID {
 			allMediuxSets[dbSet.ID] = mediuxSet.PosterSet
@@ -132,7 +132,7 @@ func handleMovie(ctx context.Context, mediaItem models.MediaItem, dbItem models.
 		// Get the latest set details from MediUX
 		switch dbSet.Type {
 		case "movie":
-			mediuxSet, _, Err = mediux.GetMovieSetByID(ctx, dbSet.ID, mediaItem.LibraryTitle)
+			mediuxSet, _, Err = mediux.GetMovieSetByID(ctx, dbSet.ID, mediaItem.LibraryTitle, mediaItem.Edition)
 			if Err.Message != "" {
 				setResult.Result = "error"
 				setResult.Reason = "Failed to get latest set details from MediUX"
@@ -140,7 +140,7 @@ func handleMovie(ctx context.Context, mediaItem models.MediaItem, dbItem models.
 				continue
 			}
 		case "collection":
-			mediuxSet, includedItems, Err = mediux.GetMovieCollectionSetByID(ctx, dbSet.ID, mediaItem.TMDB_ID, mediaItem.LibraryTitle, false)
+			mediuxSet, includedItems, Err = mediux.GetMovieCollectionSetByID(ctx, dbSet.ID, mediaItem.TMDB_ID, mediaItem.LibraryTitle, mediaItem.Edition, false)
 			if Err.Message != "" {
 				setResult.Result = "error"
 				setResult.Reason = "Failed to get latest set details from MediUX"
@@ -232,7 +232,7 @@ func handleMovie(ctx context.Context, mediaItem models.MediaItem, dbItem models.
 			if !handled {
 				checkImageDates(image, &dbSet, oldImageByKey, &imagesToRedownload, &check)
 			}
-				actionImageChecks.AppendResult(imageName, check)
+			actionImageChecks.AppendResult(imageName, check)
 		}
 		actionCheckChanges.AppendResult("images_to_redownload_count", len(imagesToRedownload))
 		actionCheckChanges.Complete()
@@ -428,17 +428,17 @@ func handleCollectionAutoAddNewItems(ctx context.Context, dbSet models.DBPosterS
 						},
 						Images: itemImages,
 					},
-				LastDownloaded:            time.Now(),
-				SelectedTypes:             dbSet.SelectedTypes,
-				AutoDownload:              dbSet.AutoDownload,
-				AutoAddNewCollectionItems: dbSet.AutoAddNewCollectionItems,
-				ToDelete:                  false,
-				Priority:                  dbSet.Priority,
+					LastDownloaded:            time.Now(),
+					SelectedTypes:             dbSet.SelectedTypes,
+					AutoDownload:              dbSet.AutoDownload,
+					AutoAddNewCollectionItems: dbSet.AutoAddNewCollectionItems,
+					ToDelete:                  false,
+					Priority:                  dbSet.Priority,
+				},
 			},
-		},
-	}
+		}
 
-	upsertErr := database.UpsertSavedItem(ctx, newSavedItem)
+		upsertErr := database.UpsertSavedItem(ctx, newSavedItem)
 		if upsertErr.Message != "" {
 			action.AppendWarning("collection_auto_add_db_upsert_failed", map[string]any{
 				"tmdb_id":       item.TMDB_ID,

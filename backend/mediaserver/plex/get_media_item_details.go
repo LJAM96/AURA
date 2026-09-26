@@ -79,7 +79,7 @@ func (p *Plex) GetMediaItemDetails(ctx context.Context, item *models.MediaItem) 
 	}
 
 	// Check if Media Item exists in DB
-	ignored, ignoredMode, sets, logErr := database.CheckIfMediaItemExists(ctx, item.TMDB_ID, item.LibraryTitle)
+	ignored, ignoredMode, sets, logErr := database.CheckIfMediaItemExists(ctx, item.TMDB_ID, item.LibraryTitle, item.Edition)
 	if logErr.Message != "" {
 		logAction.AppendWarning("message", "Failed to check if media item exists in database")
 		logAction.AppendWarning("error", Err)
@@ -89,6 +89,7 @@ func (p *Plex) GetMediaItemDetails(ctx context.Context, item *models.MediaItem) 
 		item.IgnoredInDB = false
 		item.IgnoredMode = ""
 	} else {
+		item.DBSavedSets = []models.DBSavedSet{}
 		item.IgnoredInDB = true
 		item.IgnoredMode = ignoredMode
 	}
@@ -102,7 +103,7 @@ func (p *Plex) GetMediaItemDetails(ctx context.Context, item *models.MediaItem) 
 	cache.LibraryStore.UpdateMediaItem(item.LibraryTitle, item)
 
 	// Update the Media Item on Server in the DB
-	updateErr := database.UpdateMediaItemOnServer(ctx, item.TMDB_ID, item.LibraryTitle, true)
+	updateErr := database.UpdateMediaItemOnServer(ctx, item.TMDB_ID, item.LibraryTitle, item.Edition, true)
 	if updateErr.Message != "" {
 		logAction.AppendWarning("update_on_server_error", updateErr.Message)
 	}
@@ -128,6 +129,7 @@ func extractMediaItemFromResponse(ctx context.Context, metadata PlexLibraryItems
 	item.AddedAt = metadata.AddedAt
 	item.ContentRating = metadata.ContentRating
 	item.Summary = metadata.Summary
+	item.Edition = metadata.Edition
 	// Calculate ReleasedAt from OriginallyAvailableAt if available
 	if t, err := time.Parse("2006-01-02", metadata.OriginallyAvailableAt); err == nil {
 		item.ReleasedAt = t.Unix()

@@ -184,7 +184,7 @@ func updateCollectionImageIndex(ctx context.Context, collectionItem *models.Coll
 	return Err
 }
 
-func uploadImage(ctx context.Context, item *models.MediaItem, itemRatingKey string, imageFile models.ImageFile, imageData []byte) (Err logging.LogErrorInfo) {
+func uploadImage(ctx context.Context, item *models.MediaItem, itemRatingKey string, imageFile models.ImageFile, imageData []byte, imageType string) (Err logging.LogErrorInfo) {
 	ctx, logAction := logging.AddSubActionToContext(ctx, fmt.Sprintf(
 		"%s: Uploading %s Image for %s",
 		config.Current.MediaServer.Type, utils.GetFileDownloadName(item.Title, imageFile), utils.MediaItemInfo(*item),
@@ -210,7 +210,7 @@ func uploadImage(ctx context.Context, item *models.MediaItem, itemRatingKey stri
 	base64ImageData := base64.StdEncoding.EncodeToString(imageData)
 
 	// Make the HTTP Request to EJ
-	resp, _, Err := makeRequest(ctx, config.Current.MediaServer, URL, "POST", []byte(base64ImageData))
+	resp, _, Err := makeRequest(ctx, config.Current.MediaServer, URL, "POST", []byte(base64ImageData), imageType)
 	if Err.Message != "" {
 		logAction.SetErrorFromInfo(Err)
 		return Err
@@ -220,7 +220,7 @@ func uploadImage(ctx context.Context, item *models.MediaItem, itemRatingKey stri
 	return Err
 }
 
-func uploadCollectionImage(ctx context.Context, collectionItem *models.CollectionItem, imageFile models.ImageFile, imageData []byte) (Err logging.LogErrorInfo) {
+func uploadCollectionImage(ctx context.Context, collectionItem *models.CollectionItem, imageFile models.ImageFile, imageData []byte, imageType string) (Err logging.LogErrorInfo) {
 	ctx, logAction := logging.AddSubActionToContext(ctx, fmt.Sprintf(
 		"%s: Uploading %s Image for Collection %s",
 		config.Current.MediaServer.Type, utils.GetFileDownloadName(collectionItem.Title, imageFile), utils.CollectionItemInfo(*collectionItem),
@@ -248,7 +248,7 @@ func uploadCollectionImage(ctx context.Context, collectionItem *models.Collectio
 	base64ImageData := base64.StdEncoding.EncodeToString(imageData)
 
 	// Make the HTTP Request to EJ
-	resp, _, Err := makeRequest(ctx, config.Current.MediaServer, URL, "POST", []byte(base64ImageData))
+	resp, _, Err := makeRequest(ctx, config.Current.MediaServer, URL, "POST", []byte(base64ImageData), imageType)
 	if Err.Message != "" {
 		logAction.SetErrorFromInfo(Err)
 		return *logAction.Error

@@ -94,4 +94,4 @@ EXPOSE 8888
 
 # Command to run both the backend and frontend
 #CMD ["sh", "-c", "./main & NODE_ENV=production npm start --prefix /frontend"]
-CMD ["sh", "-c", "./main & node server.js"]
+CMD ["sh", "-c", "./main & HOSTNAME=0.0.0.0 node server.js"]

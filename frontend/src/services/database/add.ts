@@ -77,6 +77,7 @@ export const AddNewItemToDB = async (
       upsertMediaItemSavedSet({
         tmdbID: response.data.data.saved_item.media_item.tmdb_id,
         libraryTitle: response.data.data.saved_item.media_item.library_title,
+        edition: response.data.data.saved_item.media_item.edition,
         setID: posterSet.id,
         setUser: posterSet.user_created,
         selectedTypes: posterSet.selected_types,

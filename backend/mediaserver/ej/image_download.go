@@ -20,13 +20,13 @@ func (e *EJ) DownloadApplyImageToMediaItem(ctx context.Context, item *models.Med
 	// Get the Image from MediUX
 	// mediux.GetImage will handle checking the temp folder and caching based on config
 	formatDate := imageFile.Modified.Format("20060102150405")
-	imageData, _, Err := mediux.GetImage(ctx, imageFile.ID, formatDate, mediux.ImageQualityOriginal)
+	imageData, imageType, Err := mediux.GetImage(ctx, imageFile.ID, formatDate, mediux.ImageQualityOriginal)
 	if Err.Message != "" {
 		return Err
 	}
 
 	// Apply the Image to the Media Item
-	Err = applyImageToMediaItem(ctx, item, imageFile, imageData)
+	Err = applyImageToMediaItem(ctx, item, imageFile, imageData, imageType)
 	if Err.Message != "" {
 		return Err
 	}

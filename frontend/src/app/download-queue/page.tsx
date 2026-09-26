@@ -1,304 +1,233 @@
 "use client";
 
-import { formatExactDateTime } from "@/helper/format-date-last-updates";
-import { ReturnErrorMessage } from "@/services/api-error-return";
+import { formatImageTypeLabel } from "@/helper/format-image-type";
+import { GetDownloadHistory } from "@/services/downloads/history-get";
+import { RemoveAllDownloadHistory } from "@/services/downloads/history-remove";
 import { GetAllDownloadQueueItems } from "@/services/downloads/queue-get";
-import type { GetDownloadQueueStatus_Response } from "@/services/downloads/queue-status";
-import { GetDownloadQueueStatus } from "@/services/downloads/queue-status";
-import { Globe } from "lucide-react";
+import { RemoveAllFromQueue } from "@/services/downloads/queue-remove";
+import { subscribeToDownloadQueue } from "@/services/downloads/queue-stream";
+import { toast } from "sonner";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
-import DownloadQueueEntry from "@/components/shared/download-queue-entry";
+import { ConfirmDestructiveDialogActionButton } from "@/components/shared/dialog-destructive-action";
+import DownloadEntryCard from "@/components/shared/download-entry";
 import { ErrorMessage } from "@/components/shared/error-message";
 import Loader from "@/components/shared/loader";
-import { RefreshButton } from "@/components/shared/refresh-button";
 import { ResponsiveGrid } from "@/components/shared/responsive-grid";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { H2, H3 } from "@/components/ui/typography";
-
-import { cn } from "@/lib/cn";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { H2 } from "@/components/ui/typography";
 
 import type { APIResponse } from "@/types/api/api-response";
-import type { DBSavedItem } from "@/types/database/db-poster-set";
+import type { DownloadHistoryEntry, DownloadQueueJob, DownloadQueueProgress } from "@/types/database/download-queue";
 
 const DownloadQueuePage: React.FC = () => {
-  // Refs - Fetching
-  const isFetchingRef = useRef(false);
+  // States - Queue
+  const [jobs, setJobs] = useState<DownloadQueueJob[]>([]);
+  const [progress, setProgress] = useState<DownloadQueueProgress | null>(null);
+  const [queueLoading, setQueueLoading] = useState(true);
+  const [queueError, setQueueError] = useState<APIResponse<unknown> | null>(null);
 
-  // States - Queue Entries
-  const [inProgressEntries, setInProgressEntries] = useState<DBSavedItem[]>([]);
-  const [errorEntries, setErrorEntries] = useState<DBSavedItem[]>([]);
-  const [warningEntries, setWarningEntries] = useState<DBSavedItem[]>([]);
+  // States - History
+  const [historyEntries, setHistoryEntries] = useState<DownloadHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<APIResponse<unknown> | null>(null);
 
-  // States - Queue Status
-  const [queueStatus, setQueueStatus] = useState<GetDownloadQueueStatus_Response>({
-    time: "",
-    status: "",
-    message: "",
-    warnings: [],
-    errors: [],
-  });
-  const [secondsToNextRun, setSecondsToNextRun] = useState<number>(0);
-
-  // States - Loading & Error
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<APIResponse<unknown> | null>(null);
-
-  // Fetch Queue Entries
-  const fetchQueueEntries = useCallback(async () => {
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
-
+  const fetchHistory = useCallback(async () => {
     try {
-      setLoading(true);
-
-      const response = await GetAllDownloadQueueItems();
-
+      setHistoryLoading(true);
+      const response = await GetDownloadHistory();
       if (response.status === "error") {
-        setError(response);
+        setHistoryError(response);
         return;
       }
-
-      setInProgressEntries(response.data?.in_progress_entries || []);
-      setErrorEntries(response.data?.error_entries || []);
-      setWarningEntries(response.data?.warning_entries || []);
-      setError(null);
-    } catch (error) {
-      setError(ReturnErrorMessage<unknown>(error));
+      setHistoryEntries(response.data?.entries || []);
+      setHistoryError(null);
     } finally {
-      isFetchingRef.current = false;
-      setLoading(false);
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  // Initial queue load (SSE also sends a snapshot on connect, but this avoids a loading flash on slow connections)
+  const fetchQueueEntries = useCallback(async () => {
+    try {
+      setQueueLoading(true);
+      const response = await GetAllDownloadQueueItems();
+      if (response.status === "error") {
+        setQueueError(response);
+        return;
+      }
+      setJobs(response.data?.jobs || []);
+      setQueueError(null);
+    } finally {
+      setQueueLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchQueueEntries();
-  }, [fetchQueueEntries, queueStatus.status]);
+    fetchHistory();
+  }, [fetchQueueEntries, fetchHistory]);
 
+  // Live updates over SSE, replacing the old 2s HTTP polling.
   useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const statusResponse = await GetDownloadQueueStatus();
-        if (statusResponse.status === "error") {
-          throw new Error("Error fetching status");
-        }
-        const status = statusResponse.data || {
-          time: new Date().toISOString(),
-          status: "Error",
-          message: "Unable to get status from server",
-          warnings: [],
-          errors: ["No status data"],
-        };
-        setQueueStatus(status);
-      } catch {
-        const errorResponse: GetDownloadQueueStatus_Response = {
-          time: new Date().toISOString(),
-          status: "Error",
-          message: "Failed to fetch status",
-          warnings: [],
-          errors: [],
-        };
-        setQueueStatus(errorResponse);
-      }
-    };
+    const unsubscribe = subscribeToDownloadQueue({
+      onSnapshot: (snapshotJobs) => {
+        setJobs(snapshotJobs ?? []);
+        setProgress(null);
+        setQueueLoading(false);
+        setQueueError(null);
+      },
+      onJobAdded: (job) => {
+        // The snapshot query can race a real add, so the job may already be
+        // in state by the time this event arrives - don't append a duplicate.
+        setJobs((prev) => (prev.some((j) => j.id === job.id) ? prev : [...prev, job]));
+      },
+      onJobStarted: (job) => {
+        setProgress(null);
+        setJobs((prev) => prev.map((j) => (j.id === job.id ? job : j)));
+      },
+      onJobProgress: (jobProgress) => {
+        setProgress(jobProgress);
+      },
+      onJobFinished: (job) => {
+        // Server always clears the job on finish, so drop it here too.
+        setProgress((prev) => (prev?.job_id === job.id ? null : prev));
+        setJobs((prev) => prev.filter((j) => j.id !== job.id));
+        // A job finishing means a new history entry may exist.
+        fetchHistory();
+      },
+      onJobRemoved: (job) => {
+        setJobs((prev) => prev.filter((j) => j.id !== job.id));
+      },
+      onQueueCleared: () => {
+        setJobs([]);
+        setProgress(null);
+      },
+    });
 
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 1000 * 2); // Refresh every 2 seconds
+    return unsubscribe;
+  }, [fetchHistory]);
 
-    return () => clearInterval(interval);
-  }, []);
+  const onClearQueue = async () => {
+    const response = await RemoveAllFromQueue();
+    if (response.status === "error") {
+      toast.error(`Error clearing queue: ${response.error?.message || "Unknown error occurred."}`);
+    } else {
+      toast.success(response.data?.result || "Cleared the download queue.");
+    }
+  };
 
-  useEffect(() => {
-    const updateNextRunTime = () => {
-      const now = new Date();
-      const next = new Date(now);
-      next.setSeconds(0, 0);
-      if (now.getSeconds() !== 0 || now.getMilliseconds() !== 0) {
-        next.setMinutes(now.getMinutes() + 1);
-      }
+  const onClearHistory = async () => {
+    const response = await RemoveAllDownloadHistory();
+    if (response.status === "error") {
+      toast.error(`Error clearing history: ${response.error?.message || "Unknown error occurred."}`);
+    } else {
+      toast.success(response.data?.result || "Cleared the download history.");
+    }
+    await fetchHistory();
+  };
 
-      const diff = Math.max(0, Math.floor((next.getTime() - now.getTime()) / 1000));
-      setSecondsToNextRun(diff);
-    };
+  // Finished jobs get recorded to History, so the queue only shows pending/processing.
+  const activeJobs = jobs
+    .filter((j) => j.status === "pending" || j.status === "processing")
+    .sort((a, b) => (a.status === b.status ? 0 : a.status === "processing" ? -1 : 1));
 
-    updateNextRunTime();
-    const interval = setInterval(updateNextRunTime, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  if (loading) {
-    return <Loader className="mt-10" message="Loading download queue entries..." />;
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center p-6 gap-4">
-        <ErrorMessage error={error} />
-      </div>
-    );
-  }
-
-  const defaultAccordionValues = [
-    inProgressEntries.length > 0 ? "in_progress" : null,
-    errorEntries.length > 0 ? "error_entries" : null,
-    warningEntries.length > 0 ? "warning_entries" : null,
-  ].filter(Boolean) as string[];
+  const progressLabel = progress
+    ? (() => {
+        const label = formatImageTypeLabel(progress);
+        return `Downloading ${label || "image"} for ${progress.media_item_title}`;
+      })()
+    : null;
 
   return (
     <div className="container mx-auto p-4 min-h-screen flex flex-col items-center">
       <H2 className="text-3xl font-bold mb-4">Download Queue</H2>
 
-      {typeof secondsToNextRun === "number" && (
-        <div className="w-full max-w-4xl mb-2 text-xs text-muted-foreground text-right flex items-center justify-end gap-2">
-          <span className="font-mono">Next Run: {secondsToNextRun}s</span>
-          <span title="HTTP Polling">
-            <Globe className="inline-block h-4 w-4 text-blue-500" />
-          </span>
-        </div>
-      )}
-      <pre
-        className={cn(
-          "w-full max-w-4xl mb-4 p-3 rounded text-xs whitespace-pre-wrap border",
-          queueStatus.status === "Error"
-            ? "border-red-400 text-red-500"
-            : queueStatus.status === "Warning"
-              ? "border-yellow-400 text-yellow-500"
-              : queueStatus.status === "Success"
-                ? "border-green-400 text-green-500"
-                : queueStatus.status === "Idle - Queue Empty"
-                  ? "border-gray-400 text-gray-500"
-                  : "border-primary text-primary"
-        )}
-      >
-        {queueStatus.time && (
-          <div>
-            <b>Last Run:</b> {formatExactDateTime(queueStatus.time)}
-          </div>
-        )}
-        {queueStatus.status && (
-          <div>
-            <b>Status:</b> {queueStatus.status}
-          </div>
-        )}
-        {queueStatus.message && <div className="mt-2 mb-2">{queueStatus.message}</div>}
-        {queueStatus.warnings && queueStatus.warnings.length > 0 && (
-          <div className="mt-1">
-            <b className="text-yellow-500">Warnings:</b>
-            <ul className="list-disc ml-5 text-yellow-500">
-              {queueStatus.warnings.map((w, i) => (
-                <li key={i}>{w}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {queueStatus.errors && queueStatus.errors.length > 0 && (
-          <div className="mt-1">
-            <b className="text-red-500">Errors:</b>
-            <ul className="list-disc ml-5 text-red-500">
-              {queueStatus.errors.map((e, i) => (
-                <li key={i}>{e}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </pre>
+      <Tabs defaultValue="queue" className="w-full">
+        <TabsList className="mx-auto">
+          <TabsTrigger value="queue">Queue</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
+        </TabsList>
 
-      {inProgressEntries.length === 0 && errorEntries.length === 0 && warningEntries.length === 0 && (
-        <p className="text-gray-500">No download queue entries found</p>
-      )}
+        <TabsContent value="queue" className="w-full">
+          {queueLoading ? (
+            <Loader className="mt-10" message="Loading download queue entries..." />
+          ) : queueError ? (
+            <div className="flex flex-col items-center p-6 gap-4">
+              <ErrorMessage error={queueError} />
+            </div>
+          ) : (
+            <>
+              <div className="w-full flex justify-end mb-2">
+                <ConfirmDestructiveDialogActionButton
+                  variant="outline"
+                  className="text-destructive border-1 shadow-none hover:text-red-500 cursor-pointer"
+                  confirmText="Clear Queue"
+                  title="Clear Download Queue?"
+                  description="Are you sure you want to remove all items from the download queue? Items currently downloading will not be interrupted. This action cannot be undone."
+                  onConfirm={onClearQueue}
+                  disabled={jobs.length === 0}
+                >
+                  Clear Queue
+                </ConfirmDestructiveDialogActionButton>
+              </div>
 
-      <div className="w-full">
-        <Accordion type="multiple" className="mb-4" defaultValue={defaultAccordionValues}>
-          {inProgressEntries.length > 0 && (
-            <AccordionItem value="in_progress">
-              <AccordionTrigger
-                className={cn(
-                  "cursor-pointer",
-                  "hover:underline-none focus:underline-none underline-none hover:no-underline focus:no-underline justify-center"
-                )}
-              >
-                <H3>In Progress Entries</H3>
-              </AccordionTrigger>
-              <AccordionContent>
-                {inProgressEntries.length === 0 ? (
-                  <p className="text-gray-500">No entries in progress.</p>
-                ) : (
-                  <ResponsiveGrid size="regular">
-                    {inProgressEntries.map((entry) => (
-                      <DownloadQueueEntry
-                        key={entry.media_item.tmdb_id}
-                        entry={entry}
-                        fetchQueueEntries={fetchQueueEntries}
-                      />
-                    ))}
-                  </ResponsiveGrid>
-                )}
-              </AccordionContent>
-            </AccordionItem>
+              {progressLabel && (
+                <p className="w-full text-center text-sm text-muted-foreground mb-4">{progressLabel}</p>
+              )}
+
+              {activeJobs.length === 0 ? (
+                <p className="text-gray-500">
+                  No download queue entries found. Add some items to the queue to get started.
+                </p>
+              ) : (
+                <ResponsiveGrid size="larger">
+                  {activeJobs.map((job) => (
+                    <DownloadEntryCard key={job.id} mode="queue" job={job} fetchQueueEntries={fetchQueueEntries} />
+                  ))}
+                </ResponsiveGrid>
+              )}
+            </>
           )}
+        </TabsContent>
 
-          {errorEntries.length > 0 && (
-            <AccordionItem value="error_entries">
-              <AccordionTrigger
-                className={cn(
-                  "cursor-pointer",
-                  "hover:underline-none focus:underline-none underline-none hover:no-underline focus:no-underline justify-center"
-                )}
-              >
-                <H3>Error Entries</H3>
-              </AccordionTrigger>
-              <AccordionContent>
-                {errorEntries.length === 0 ? (
-                  <p className="text-gray-500">No error entries.</p>
-                ) : (
-                  <ResponsiveGrid size="regular">
-                    {errorEntries.map((entry) => (
-                      <DownloadQueueEntry
-                        key={entry.media_item.tmdb_id}
-                        entry={entry}
-                        fetchQueueEntries={fetchQueueEntries}
-                      />
-                    ))}
-                  </ResponsiveGrid>
-                )}
-              </AccordionContent>
-            </AccordionItem>
+        <TabsContent value="history" className="w-full">
+          {historyLoading ? (
+            <Loader className="mt-10" message="Loading download history..." />
+          ) : historyError ? (
+            <div className="flex flex-col items-center p-6 gap-4">
+              <ErrorMessage error={historyError} />
+            </div>
+          ) : (
+            <>
+              <div className="w-full flex justify-end mb-2">
+                <ConfirmDestructiveDialogActionButton
+                  variant="outline"
+                  className="text-destructive border-1 shadow-none hover:text-red-500 cursor-pointer"
+                  confirmText="Clear History"
+                  title="Clear Download History?"
+                  description="Are you sure you want to remove all download history entries? This action cannot be undone."
+                  onConfirm={onClearHistory}
+                  disabled={historyEntries.length === 0}
+                >
+                  Clear History
+                </ConfirmDestructiveDialogActionButton>
+              </div>
+
+              {historyEntries.length === 0 ? (
+                <p className="text-gray-500">No download history found</p>
+              ) : (
+                <ResponsiveGrid size="larger">
+                  {historyEntries.map((entry) => (
+                    <DownloadEntryCard key={entry.id} mode="history" entry={entry} fetchHistory={fetchHistory} />
+                  ))}
+                </ResponsiveGrid>
+              )}
+            </>
           )}
-
-          {warningEntries.length > 0 && (
-            <AccordionItem value="warning_entries">
-              <AccordionTrigger
-                className={cn(
-                  "cursor-pointer",
-                  "hover:underline-none focus:underline-none underline-none hover:no-underline focus:no-underline justify-center"
-                )}
-              >
-                <H3>Warning Entries</H3>
-              </AccordionTrigger>
-              <AccordionContent>
-                {warningEntries.length === 0 ? (
-                  <p className="text-gray-500">No warning entries.</p>
-                ) : (
-                  <ResponsiveGrid size="larger">
-                    {warningEntries.map((entry) => (
-                      <DownloadQueueEntry
-                        key={entry.media_item.tmdb_id}
-                        entry={entry}
-                        fetchQueueEntries={fetchQueueEntries}
-                      />
-                    ))}
-                  </ResponsiveGrid>
-                )}
-              </AccordionContent>
-            </AccordionItem>
-          )}
-        </Accordion>
-      </div>
-
-      {/* Refresh Button */}
-      <RefreshButton onClick={() => fetchQueueEntries()} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

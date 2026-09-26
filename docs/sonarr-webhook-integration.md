@@ -14,11 +14,11 @@ Set up a webhook in Sonarr to notify Aura when an episode file is upgraded. Aura
 
 ## Setting Up the Webhook in Sonarr
 
+0. **Generate an API key** in Aura under `Settings` → `Authentication` → `API Key` if you haven't already. Copy it immediately - it's only shown once.
 1. **Open Sonarr** and go to `Settings` → `Connect`.
 2. Click the **`+`** button to add a new connection.
 3. Select **Webhook** from the connection types.
 4. Fill in the following details:
-
     - **Name:**  
       `Webhook - aura` (or any name you prefer)
     - **Notification Triggers:**  
@@ -30,16 +30,23 @@ Set up a webhook in Sonarr to notify Aura when an episode file is upgraded. Aura
         ```
         http://<AURA_HOST>:<AURA_PORT>/api/sonarr/webhook?library=4K%20Series
         ```
+
         - Replace `<AURA_HOST>` with the hostname or IP address where Aura is running.
         - Replace `<AURA_PORT>` with the backend port number for Aura. By default, this is `8888` unless you have changed it.
         - Replace `4K%20Series` with your library name (URL encode spaces/special characters).
     - **Method:**  
       `POST`
+    - **Username:**  
+      Anything - this field isn't checked, but Sonarr requires it to be non-empty when a Password is set.
+    - **Password:**  
+      Your Aura API key from step 0.
     - _(Optional)_ **Tags:**  
       Configure if you want to limit the webhook to specific series tags.
 
 5. Click **Test** to ensure the webhook works.
 6. Click **Save** to finalize setup.
+
+> **Note:** If authentication is enabled in Aura, this webhook now requires HTTP Basic Auth (with your API key as the password) - it's no longer accepted unauthenticated. Sonarr's built-in Webhook connection type doesn't support custom headers, which is why Basic Auth (not an `X-Api-Key` header) is used here specifically. The same applies to Radarr's Webhook connection.
 
 ---
 

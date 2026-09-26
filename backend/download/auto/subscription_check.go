@@ -126,21 +126,6 @@ func processSubscriptionSet(ctx context.Context, sub models.UserSubscription, se
 	ctx, logAction := logging.AddSubActionToContext(ctx, fmt.Sprintf("Processing Subscription Set for item %s", itemTMDBID), logging.LevelDebug)
 	defer logAction.Complete()
 
-	// Check if this item already exists in the database
-	ignored, _, existingSets, _ := database.CheckIfMediaItemExists(ctx, itemTMDBID, "")
-	if ignored {
-		logAction.AppendResult("status", "ignored")
-		return logging.LogErrorInfo{}
-	}
-
-	// Check if we already have this set saved
-	for _, existingSet := range existingSets {
-		if existingSet.ID == set.ID {
-			logAction.AppendResult("status", "already_saved")
-			return logging.LogErrorInfo{}
-		}
-	}
-
 	// Find the item in the user's library cache
 	var foundItem *models.MediaItem
 	var libraryTitle string
@@ -165,6 +150,23 @@ func processSubscriptionSet(ctx context.Context, sub models.UserSubscription, se
 	if sub.LibrarySection != nil && *sub.LibrarySection != "" && *sub.LibrarySection != libraryTitle {
 		logAction.AppendResult("status", "library_mismatch")
 		return logging.LogErrorInfo{}
+	}
+
+	// Check if this item already exists in the database. The library title and
+	// edition have to match the ones the upsert below will use, otherwise an
+	// already-saved set is never found and gets re-added on every check.
+	ignored, _, existingSets, _ := database.CheckIfMediaItemExists(ctx, itemTMDBID, foundItem.LibraryTitle, foundItem.Edition)
+	if ignored {
+		logAction.AppendResult("status", "ignored")
+		return logging.LogErrorInfo{}
+	}
+
+	// Check if we already have this set saved
+	for _, existingSet := range existingSets {
+		if existingSet.ID == set.ID {
+			logAction.AppendResult("status", "already_saved")
+			return logging.LogErrorInfo{}
+		}
 	}
 
 	// Build the DBSavedItem with subscription's image types

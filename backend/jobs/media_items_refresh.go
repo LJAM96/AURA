@@ -1,10 +1,24 @@
 package jobs
 
 import (
+	"aura/config"
 	"aura/logging"
 	"aura/mediaserver"
 	"context"
 )
+
+func runRefreshMediaItemsAndCollectionsJobBody(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			logging.LOGGER.Error().Timestamp().Interface("recover", r).Msg("PANIC: in RefreshMediaItemsAndCollectionsJob")
+		}
+	}()
+	ctx, ld := logging.CreateLoggingContext(ctx, "Cron Job")
+	action := ld.AddAction("Refresh Media Items and Collections", logging.LevelInfo)
+	ctx = logging.WithCurrentAction(ctx, action)
+	mediaserver.GetAllLibrarySectionsAndItems(ctx, true)
+	ld.Log()
+}
 
 func StartRefreshMediaItemsAndCollectionsJob() error {
 	mu.Lock()
@@ -15,33 +29,29 @@ func StartRefreshMediaItemsAndCollectionsJob() error {
 		return nil
 	}
 
-	if refreshMediaItemsAndCollectionsJobID != 0 {
-		c.Remove(refreshMediaItemsAndCollectionsJobID)
-		refreshMediaItemsAndCollectionsJobID = 0
+	removeScheduledJob(JobKeyRefreshMediaItemsAndCollections)
+
+	enabled, spec := config.Current.Jobs.RefreshMediaItemsAndCollections.Resolve(config.JobDefaults.RefreshMediaItemsAndCollections)
+	if !enabled {
+		logging.LOGGER.Info().Timestamp().Msg("Refresh Media Items and Collections Job Stopped")
+		return nil
 	}
 
-	var err error
-	spec := "*/90 * * * *"
-	refreshMediaItemsAndCollectionsJobID, err = c.AddFunc(spec, func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logging.LOGGER.Error().Timestamp().Interface("recover", r).Msg("PANIC: in scheduled RefreshMediaItemsAndCollectionsJob")
-			}
-		}()
-		ctx, ld := logging.CreateLoggingContext(context.Background(), "Cron Job")
-		action := ld.AddAction("Refresh Media Items and Collections", logging.LevelInfo)
-		ctx = logging.WithCurrentAction(ctx, action)
-		mediaserver.GetAllLibrarySectionsAndItems(ctx, true)
-		ld.Log()
-	})
-	if err != nil {
+	if err := addScheduledJob(JobKeyRefreshMediaItemsAndCollections, spec, func() {
+		runRefreshMediaItemsAndCollectionsJobBody(context.Background())
+	}); err != nil {
 		return err
 	}
-	jobSpecs[refreshMediaItemsAndCollectionsJobID] = spec
 
 	logging.LOGGER.Info().Timestamp().
 		Str("cron", spec).
-		Str("interval", "every 90 minutes").
 		Msg("Refresh Media Items and Collections Job Started")
 	return nil
+}
+
+func RunRefreshMediaItemsAndCollectionsJobNow() {
+	go func() {
+		recordManualRun(JobKeyRefreshMediaItemsAndCollections)
+		runRefreshMediaItemsAndCollectionsJobBody(context.Background())
+	}()
 }

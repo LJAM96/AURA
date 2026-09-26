@@ -16,7 +16,8 @@ type reloadConfigResponse struct {
 // @Description  Reload the configuration file and return the current config status
 // @Tags         Config
 // @Produce      json
-// @Security 	 BearerAuth
+// @Security     SessionCookie
+// @Security     ApiKeyAuth
 // @Failure      401  {object}  httpx.UnauthorizedResponse "Unauthorized (only when Auth.Enabled=true)"
 // @Success      200  {object}  httpx.JSONResponse{data=reloadConfigResponse}
 // @Failure      500  {object}  httpx.JSONResponse "Internal Server Error"
@@ -37,11 +38,12 @@ func ReloadAppConfig(w http.ResponseWriter, r *http.Request) {
 	sanitizedConfig := config.Current.SanitizeConfig(ctx)
 
 	response.Status = AppConfigStatus{
-		ConfigLoaded:    config.Loaded,
-		ConfigValid:     (config.Valid && config.MediuxValid && config.MediaServerValid),
-		NeedsSetup:      !(config.Loaded && config.Valid && config.MediuxValid && config.MediaServerValid),
-		CurrentSetup:    *sanitizedConfig,
-		MediaServerName: config.MediaServerName,
+		ConfigLoaded:     config.Loaded,
+		ConfigValid:      (config.Valid && config.MediuxValid && config.MediaServerValid),
+		NeedsSetup:       !(config.Loaded && config.Valid && config.MediuxValid && config.MediaServerValid),
+		CurrentSetup:     *sanitizedConfig,
+		MediaServerName:  config.MediaServerName,
+		APIKeyConfigured: config.Current.Auth.APIKeyHash != "",
 	}
 
 	httpx.SendResponse(w, ld, response)

@@ -45,16 +45,18 @@ func (c *MediaServerLibraryCache) UpdateSection(section *models.LibrarySection) 
 		existing.ID = section.ID
 		existing.Paths = section.Paths
 
-		// Create a map of existing items for O(1) lookup
+		// Create a map of existing items for O(1) lookup.
+		// Keyed by TMDB_ID+Edition so multiple editions of the same TMDB item
+		// (e.g. Theatrical vs Director's Cut) don't collapse into one entry.
 		existingItems := make(map[string]*models.MediaItem)
 		for i := range existing.MediaItems {
-			existingItems[existing.MediaItems[i].TMDB_ID] = &existing.MediaItems[i]
+			existingItems[mediaItemCacheKey(&existing.MediaItems[i])] = &existing.MediaItems[i]
 		}
 
 		// Update existing items and collect new ones
 		var newItems []models.MediaItem
 		for _, newItem := range section.MediaItems {
-			if existingItem, found := existingItems[newItem.TMDB_ID]; found {
+			if existingItem, found := existingItems[mediaItemCacheKey(&newItem)]; found {
 				// Update existing item
 				*existingItem = newItem
 			} else {
@@ -82,9 +84,9 @@ func (c *MediaServerLibraryCache) UpdateMediaItem(sectionTitle string, item *mod
 		// Create a map of existing items for O(1) lookup
 		existingItems := make(map[string]*models.MediaItem)
 		for i := range section.MediaItems {
-			existingItems[section.MediaItems[i].TMDB_ID] = &section.MediaItems[i]
+			existingItems[mediaItemCacheKey(&section.MediaItems[i])] = &section.MediaItems[i]
 		}
-		if existingItem, found := existingItems[item.TMDB_ID]; found {
+		if existingItem, found := existingItems[mediaItemCacheKey(item)]; found {
 			// Update existing item
 			*existingItem = *item
 		} else {
@@ -104,9 +106,9 @@ func (c *MediaServerLibraryCache) UpdateMediaItemDBSavedSets(sectionTitle string
 		// Create a map of existing items for O(1) lookup
 		existingItems := make(map[string]*models.MediaItem)
 		for i := range section.MediaItems {
-			existingItems[section.MediaItems[i].TMDB_ID] = &section.MediaItems[i]
+			existingItems[mediaItemCacheKey(&section.MediaItems[i])] = &section.MediaItems[i]
 		}
-		if existingItem, found := existingItems[item.TMDB_ID]; found {
+		if existingItem, found := existingItems[mediaItemCacheKey(item)]; found {
 			// Update existing item
 			existingItem.DBSavedSets = dbSavedSets
 		}
@@ -170,7 +172,16 @@ func (c *MediaServerLibraryCache) ClearAllSections() {
 	c.sections = make(map[string]*models.LibrarySection)
 }
 
-// GetMediaItemFromSectionByTMDBID retrieves a media item by TMDB ID from a specific section
+// mediaItemCacheKey uniquely identifies a media item within a section cache.
+// Edition is included so multiple editions of the same TMDB item (e.g.
+// Theatrical vs Director's Cut) are tracked as distinct cache entries.
+func mediaItemCacheKey(item *models.MediaItem) string {
+	return item.TMDB_ID + "|" + item.Edition
+}
+
+// GetMediaItemFromSectionByTMDBID retrieves a media item by TMDB ID from a specific section.
+// If multiple editions exist for the TMDB ID, an arbitrary one is returned -
+// callers that need a specific edition should use GetMediaItemFromSectionByTMDBIDAndEdition.
 func (c *MediaServerLibraryCache) GetMediaItemFromSectionByTMDBID(sectionTitle, tmdbID string) (*models.MediaItem, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -191,6 +202,26 @@ func (c *MediaServerLibraryCache) GetMediaItemFromSectionByTMDBID(sectionTitle, 
 	if newestItem != nil {
 		return newestItem, true
 	}
+	return &models.MediaItem{}, false
+}
+
+// GetMediaItemFromSectionByTMDBIDAndEdition retrieves a specific edition of a
+// media item by TMDB ID from a specific section.
+func (c *MediaServerLibraryCache) GetMediaItemFromSectionByTMDBIDAndEdition(sectionTitle, tmdbID, edition string) (*models.MediaItem, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	section, exists := c.sections[sectionTitle]
+	if !exists {
+		return &models.MediaItem{}, false
+	}
+
+	for _, item := range section.MediaItems {
+		if item.TMDB_ID == tmdbID && item.Edition == edition {
+			return &item, true
+		}
+	}
+
 	return &models.MediaItem{}, false
 }
 

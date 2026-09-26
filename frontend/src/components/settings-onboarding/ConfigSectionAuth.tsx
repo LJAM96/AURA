@@ -1,8 +1,14 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import { GenerateAPIKey } from "@/services/auth/api-key";
+import { AlertTriangle, Check, Copy, KeyRound } from "lucide-react";
+import { toast } from "sonner";
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import Link from "next/link";
 
 import { PopoverHelp } from "@/components/shared/popover-help";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,9 +24,18 @@ interface ConfigSectionAuthProps {
   dirtyFields?: { enabled?: boolean; password?: boolean };
   onChange: <K extends keyof AppConfigAuth>(field: K, value: AppConfigAuth[K]) => void;
   errorsUpdate?: (errors: Partial<Record<keyof AppConfigAuth, string>>) => void;
+  // Whether a global API key has already been generated. The key itself is never sent to the
+  // frontend - only this boolean, computed server-side.
+  apiKeyConfigured?: boolean;
 }
 
 const hashRegex = /^\$argon2id\$v=\d+\$m=\d+,t=\d+,p=\d+\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/;
+
+const parseCommaList = (v: string): string[] =>
+  v
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
 export const ConfigSectionAuth: React.FC<ConfigSectionAuthProps> = ({
   value,
@@ -28,8 +43,43 @@ export const ConfigSectionAuth: React.FC<ConfigSectionAuthProps> = ({
   dirtyFields = {},
   onChange,
   errorsUpdate,
+  apiKeyConfigured = false,
 }) => {
   const prevErrorRef = useRef<string>("");
+
+  // API key generation is out-of-band from the editable config diff/save flow - it's its own
+  // dedicated endpoint, not a field that gets typed and saved with everything else.
+  const [keyConfigured, setKeyConfigured] = useState(apiKeyConfigured);
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setKeyConfigured(apiKeyConfigured);
+  }, [apiKeyConfigured]);
+
+  const handleGenerateKey = async () => {
+    setGenerating(true);
+    setCopied(false);
+    try {
+      const resp = await GenerateAPIKey();
+      if (resp.status === "error" || !resp.data?.api_key) {
+        toast.error(resp.error?.message || "Failed to generate API key");
+        return;
+      }
+      setGeneratedKey(resp.data.api_key);
+      setKeyConfigured(true);
+      toast.success(keyConfigured ? "API key regenerated - the previous key is now invalid" : "API key generated");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleCopyKey = async () => {
+    if (!generatedKey) return;
+    await navigator.clipboard.writeText(generatedKey);
+    setCopied(true);
+  };
 
   // Validation
   const errors = useMemo<Partial<Record<keyof AppConfigAuth, string>>>(() => {
@@ -55,8 +105,18 @@ export const ConfigSectionAuth: React.FC<ConfigSectionAuthProps> = ({
     errorsUpdate(errors);
   }, [errors, errorsUpdate]);
 
+  const oidc = value.oidc;
+  const oidcAllowlistEmpty = (oidc?.allowed_emails?.length ?? 0) === 0 && (oidc?.allowed_domains?.length ?? 0) === 0;
+
+  const updateOidc = <K extends keyof NonNullable<AppConfigAuth["oidc"]>>(
+    field: K,
+    fieldValue: NonNullable<AppConfigAuth["oidc"]>[K]
+  ) => {
+    onChange("oidc", { ...oidc, [field]: fieldValue });
+  };
+
   return (
-    <Card className={`p-5 ${Object.values(errors).some(Boolean) ? "border-red-500" : "border-muted"}`}>
+    <Card className={`p-5 space-y-4 ${Object.values(errors).some(Boolean) ? "border-red-500" : "border-muted"}`}>
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-blue-500">Authentication</h2>
       </div>
@@ -116,6 +176,157 @@ export const ConfigSectionAuth: React.FC<ConfigSectionAuthProps> = ({
           </div>
           {errors.password && <p className="text-xs text-red-500">{errors.password}</p>}
         </div>
+      </div>
+
+      {/* API Key */}
+      <div className="border rounded-md p-3 space-y-3 border-muted">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4" />
+            <Label>API Key</Label>
+            <PopoverHelp ariaLabel="help-auth-api-key">
+              <p>
+                Used for programmatic access to the API. This key is only shown once when generated, copy it
+                immediately. If you lose it, you can regenerate a new key which will invalidate the old one.
+              </p>
+              <p className="mt-2">
+                aura comes with built-in API docs at <code>/swagger/index.html</code> on your aura backend&apos;s host
+                and port (e.g. <code className="break-all">192.168.1.50:8888/swagger/index.html</code>), which you can
+                use to test the API with your key.
+              </p>
+            </PopoverHelp>
+          </div>
+          <Button type="button" size="sm" variant="outline" disabled={generating} onClick={handleGenerateKey}>
+            {keyConfigured ? "Regenerate" : "Generate"} Key
+          </Button>
+        </div>
+
+        {!keyConfigured && !generatedKey && (
+          <p className="text-xs text-muted-foreground">No API key has been generated yet.</p>
+        )}
+
+        {generatedKey && (
+          <Alert>
+            <AlertTitle>Copy this key now - it won&apos;t be shown again</AlertTitle>
+            <AlertDescription>
+              <div className="flex items-center gap-2 mt-2">
+                <code className="flex-1 break-all rounded bg-muted px-2 py-1 text-xs">{generatedKey}</code>
+                <Button type="button" size="sm" variant="outline" onClick={handleCopyKey}>
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
+
+      {/* OIDC / SSO */}
+      <div className="border rounded-md p-3 space-y-3 border-muted">
+        <div className="flex items-center justify-between">
+          <Label className="mr-2">Single Sign-On (OIDC)</Label>
+          <div className="flex items-center gap-2">
+            <Switch
+              disabled={!editing}
+              checked={oidc?.enabled ?? false}
+              onCheckedChange={(c) => updateOidc("enabled", c)}
+            />
+            {editing && (
+              <PopoverHelp ariaLabel="help-auth-oidc-enabled">
+                <p>Allow signing in via an external OIDC identity provider (e.g. Authelia, Pocket ID, Authentik).</p>
+              </PopoverHelp>
+            )}
+          </div>
+        </div>
+
+        {oidc?.enabled && (
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="oidc-issuer" className="mb-1 block">
+                Issuer URL
+              </Label>
+              <Input
+                id="oidc-issuer"
+                disabled={!editing}
+                placeholder="https://idp.example.com"
+                value={oidc.issuer_url || ""}
+                onChange={(e) => updateOidc("issuer_url", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="oidc-client-id" className="mb-1 block">
+                Client ID
+              </Label>
+              <Input
+                id="oidc-client-id"
+                disabled={!editing}
+                value={oidc.client_id || ""}
+                onChange={(e) => updateOidc("client_id", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="oidc-client-secret" className="mb-1 block">
+                Client Secret
+              </Label>
+              <Input
+                id="oidc-client-secret"
+                disabled={!editing}
+                type="password"
+                value={oidc.client_secret || ""}
+                onChange={(e) => updateOidc("client_secret", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="oidc-redirect" className="mb-1 block">
+                Redirect URL
+              </Label>
+              <Input
+                id="oidc-redirect"
+                disabled={!editing}
+                placeholder="https://aura.example.com/api/auth/oidc/callback"
+                value={oidc.redirect_url || ""}
+                onChange={(e) => updateOidc("redirect_url", e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Register this exact URL as an allowed redirect URI with your identity provider.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="oidc-allowed-emails" className="mb-1 block">
+                Allowed Emails
+              </Label>
+              <Input
+                id="oidc-allowed-emails"
+                disabled={!editing}
+                placeholder="you@example.com, other@example.com"
+                value={(oidc.allowed_emails || []).join(", ")}
+                onChange={(e) => updateOidc("allowed_emails", parseCommaList(e.target.value))}
+              />
+            </div>
+            <div>
+              <Label htmlFor="oidc-allowed-domains" className="mb-1 block">
+                Allowed Domains
+              </Label>
+              <Input
+                id="oidc-allowed-domains"
+                disabled={!editing}
+                placeholder="example.com"
+                value={(oidc.allowed_domains || []).join(", ")}
+                onChange={(e) => updateOidc("allowed_domains", parseCommaList(e.target.value))}
+              />
+            </div>
+
+            {oidcAllowlistEmpty && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>No email/domain restriction configured</AlertTitle>
+                <AlertDescription>
+                  Any user who can successfully authenticate with this identity provider will be granted full access to
+                  this app.
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+        )}
       </div>
     </Card>
   );

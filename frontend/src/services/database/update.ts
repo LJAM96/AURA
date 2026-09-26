@@ -50,6 +50,7 @@ export const UpdateItemInDB = async (saveItem: DBSavedItem): Promise<APIResponse
       upsertMediaItemSavedSet({
         tmdbID: saveItem.media_item.tmdb_id,
         libraryTitle: saveItem.media_item.library_title,
+        edition: saveItem.media_item.edition,
         setID: savedSet.id,
         setUser: savedSet.user_created,
         selectedTypes: savedSet.selected_types,

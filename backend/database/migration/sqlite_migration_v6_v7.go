@@ -4,8 +4,12 @@ import (
 	"aura/database"
 	"aura/logging"
 	"context"
+	"database/sql"
 )
 
+// migrate_6_to_7 adds the DownloadQueueJobs and DownloadHistory tables,
+// replacing the old JSON-file + cron-polling download queue with a
+// SQLite-backed job queue and a persisted download history.
 func migrate_6_to_7(ctx context.Context) (Err logging.LogErrorInfo) {
 	ctx, logAction := logging.AddSubActionToContext(ctx, "Migrating Database from v6 to v7", logging.LevelInfo)
 	defer logAction.Complete()
@@ -13,40 +17,105 @@ func migrate_6_to_7(ctx context.Context) (Err logging.LogErrorInfo) {
 
 	Err = logging.LogErrorInfo{}
 
-	// Create a backup of the current database
 	backupErr := database.Backup(ctx, 6, 7)
 	if backupErr.Message != "" {
 		return backupErr
 	}
 
-	// Get DB connection
 	conn, _, getDBConnErr := database.GetDBConnection(ctx)
 	if getDBConnErr.Message != "" {
 		return getDBConnErr
 	}
 
-	// Add priority column to UserSubscriptions table (1 = highest priority, higher number = lower priority)
-	addPriorityQuery := `ALTER TABLE UserSubscriptions ADD COLUMN priority INTEGER NOT NULL DEFAULT 1;`
-	_, err := conn.ExecContext(ctx, addPriorityQuery)
-	if err != nil {
-		logAction.SetError("Failed to add priority column to UserSubscriptions table", err.Error(), map[string]any{
-			"error": err.Error(),
-			"query": addPriorityQuery,
-		})
-		return *logAction.Error
-	}
-
-	// Add index on priority for sorting
-	createPriorityIndexQuery := `CREATE INDEX IF NOT EXISTS idx_usersubscriptions_priority ON UserSubscriptions(priority);`
-	_, err = conn.ExecContext(ctx, createPriorityIndexQuery)
-	if err != nil {
-		logAction.SetError("Failed to create priority index on UserSubscriptions", err.Error(), map[string]any{
-			"error": err.Error(),
-			"query": createPriorityIndexQuery,
-		})
-		return *logAction.Error
+	queueErr := createDownloadQueueAndHistoryTables(ctx, conn, logAction)
+	if queueErr.Message != "" {
+		return queueErr
 	}
 
 	logging.LOGGER.Info().Timestamp().Msg("Database migration v6.0 to v7.0 completed successfully")
+	return Err
+}
+
+// createDownloadQueueAndHistoryTables creates the DownloadQueueJobs and
+// DownloadHistory tables and their indexes in a single transaction. Both
+// CREATE statements are IF NOT EXISTS, so this is safe to call against a
+// database that already has them.
+func createDownloadQueueAndHistoryTables(ctx context.Context, conn *sql.DB, logAction *logging.LogAction) (Err logging.LogErrorInfo) {
+	Err = logging.LogErrorInfo{}
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		logAction.SetError("Failed to begin transaction for creating download queue/history tables", "", map[string]any{"error": err.Error()})
+		return *logAction.Error
+	}
+
+	if _, err = tx.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS DownloadQueueJobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tmdb_id TEXT NOT NULL,
+    library_title TEXT NOT NULL,
+    edition TEXT NOT NULL DEFAULT '',
+    media_item_title TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending','processing','success','warning','error')),
+    result_message TEXT NOT NULL DEFAULT '',
+    result_errors TEXT NOT NULL DEFAULT '[]',
+    result_warnings TEXT NOT NULL DEFAULT '[]',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at DATETIME,
+    finished_at DATETIME,
+    worker_id TEXT NOT NULL DEFAULT ''
+);
+	`); err != nil {
+		tx.Rollback()
+		logAction.SetError("Failed to create DownloadQueueJobs table", "", map[string]any{"error": err.Error()})
+		return *logAction.Error
+	}
+
+	if _, err = tx.ExecContext(ctx, `
+CREATE INDEX IF NOT EXISTS idx_downloadqueuejobs_status ON DownloadQueueJobs(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_downloadqueuejobs_item ON DownloadQueueJobs(tmdb_id, library_title, edition);
+	`); err != nil {
+		tx.Rollback()
+		logAction.SetError("Failed to create indexes on DownloadQueueJobs table", "", map[string]any{"error": err.Error()})
+		return *logAction.Error
+	}
+
+	if _, err = tx.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS DownloadHistory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tmdb_id TEXT NOT NULL,
+    library_title TEXT NOT NULL,
+    edition TEXT NOT NULL DEFAULT '',
+    media_item_title TEXT NOT NULL,
+    media_item_year INTEGER NOT NULL,
+    set_id TEXT NOT NULL,
+    set_title TEXT NOT NULL,
+    images_succeeded INTEGER NOT NULL DEFAULT 0,
+    images_failed INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL CHECK (status IN ('success','warning','error')),
+    failed_images TEXT NOT NULL DEFAULT '[]',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+	`); err != nil {
+		tx.Rollback()
+		logAction.SetError("Failed to create DownloadHistory table", "", map[string]any{"error": err.Error()})
+		return *logAction.Error
+	}
+
+	if _, err = tx.ExecContext(ctx, `
+CREATE INDEX IF NOT EXISTS idx_downloadhistory_status_created ON DownloadHistory(status, created_at);
+	`); err != nil {
+		tx.Rollback()
+		logAction.SetError("Failed to create indexes on DownloadHistory table", "", map[string]any{"error": err.Error()})
+		return *logAction.Error
+	}
+
+	if err = tx.Commit(); err != nil {
+		logAction.SetError("Failed to commit transaction for creating download queue/history tables", "", map[string]any{"error": err.Error()})
+		return *logAction.Error
+	}
+
 	return Err
 }

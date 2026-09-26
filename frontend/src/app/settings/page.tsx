@@ -12,7 +12,6 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ConfigSectionAuth } from "@/components/settings-onboarding/ConfigSectionAuth";
-import { ConfigSectionAutoDownload } from "@/components/settings-onboarding/ConfigSectionAutoDownload";
 import { ConfigSectionImages } from "@/components/settings-onboarding/ConfigSectionImages";
 import { ConfigSectionLabelsAndTags } from "@/components/settings-onboarding/ConfigSectionLabelsAndTags";
 import { ConfigSectionLogging } from "@/components/settings-onboarding/ConfigSectionLogging";
@@ -105,6 +104,7 @@ const SettingsPage: React.FC = () => {
   const [dirty, setDirty] = useState<DirtyState>({});
 
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
 
   const preferencesRef = useRef<HTMLDivElement>(null);
 
@@ -155,6 +155,7 @@ const SettingsPage: React.FC = () => {
       const cfg = response.data?.status.current_setup ?? defaultAppConfig();
       setInitialConfig(cfg);
       setNewConfig(cfg);
+      setApiKeyConfigured(response.data?.status.api_key_configured ?? false);
       setError(null);
     } catch (error) {
       setError(ReturnErrorMessage<AppConfig>(error));
@@ -539,6 +540,7 @@ const SettingsPage: React.FC = () => {
                   dirtyFields={dirty.auth}
                   onChange={(field, value) => updateConfigField("auth", field, value)}
                   errorsUpdate={(errs) => updateSectionErrors("auth", errs as Record<string, string>)}
+                  apiKeyConfigured={apiKeyConfigured}
                 />
                 <ConfigSectionLogging
                   value={newConfig.logging}
@@ -570,14 +572,6 @@ const SettingsPage: React.FC = () => {
                   errorsUpdate={(errs) => updateSectionErrors("images", errs as Record<string, string>)}
                   mediaServerType={newConfig.media_server.type}
                 />
-                <ConfigSectionAutoDownload
-                  value={newConfig.auto_download}
-                  editing={editing}
-                  dirtyFields={dirty.auto_download}
-                  onChange={(f, v) => updateConfigField("auto_download", f, v)}
-                  errorsUpdate={(errs) => updateSectionErrors("auto_download", errs as Record<string, string>)}
-                />
-
                 {/* <ConfigSectionTMDB
 									value={newConfig.TMDB}
 									editing={editing}

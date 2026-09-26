@@ -24,7 +24,8 @@ type GetLibrarySectionItems_Response struct {
 // @Param        section_title query string true "Library Section Title"
 // @Param        section_type query string true "Library Section Type"
 // @Param        section_start_index query string true "Start Index for Pagination"
-// @Security 	 BearerAuth
+// @Security     SessionCookie
+// @Security     ApiKeyAuth
 // @Failure      401  {object}  httpx.UnauthorizedResponse "Unauthorized (only when Auth.Enabled=true)"
 // @Success      200  {object}  httpx.JSONResponse{data=GetLibrarySectionItems_Response}
 // @Failure	  500  {object}  httpx.JSONResponse "Internal Server Error"

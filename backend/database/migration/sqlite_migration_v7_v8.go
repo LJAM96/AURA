@@ -26,14 +26,21 @@ func migrate_7_to_8(ctx context.Context) (Err logging.LogErrorInfo) {
 	}
 
 	// Add priority column to SavedItems table (0 = not from subscription, 1+ = subscription priority)
-	addPriorityQuery := `ALTER TABLE SavedItems ADD COLUMN priority INTEGER NOT NULL DEFAULT 0;`
-	_, err := conn.ExecContext(ctx, addPriorityQuery)
-	if err != nil {
-		logAction.SetError("Failed to add priority column to SavedItems table", err.Error(), map[string]any{
-			"error": err.Error(),
-			"query": addPriorityQuery,
-		})
-		return *logAction.Error
+	priorityExists, checkColumnErr := checkColumnExists(ctx, "SavedItems", "priority")
+	if checkColumnErr.Message != "" {
+		return checkColumnErr
+	}
+
+	if !priorityExists {
+		addPriorityQuery := `ALTER TABLE SavedItems ADD COLUMN priority INTEGER NOT NULL DEFAULT 0;`
+		_, err := conn.ExecContext(ctx, addPriorityQuery)
+		if err != nil {
+			logAction.SetError("Failed to add priority column to SavedItems table", err.Error(), map[string]any{
+				"error": err.Error(),
+				"query": addPriorityQuery,
+			})
+			return *logAction.Error
+		}
 	}
 
 	logging.LOGGER.Info().Timestamp().Msg("Database migration v7.0 to v8.0 completed successfully")

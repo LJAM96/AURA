@@ -28,7 +28,8 @@ type SendTestNotification_Response struct {
 // @Accept       json
 // @Produce      json
 // @Param        provider body SendTestNotification_Request true "Notification Provider Information for sending the test notification"
-// @Security 	 BearerAuth
+// @Security     SessionCookie
+// @Security     ApiKeyAuth
 // @Failure      401  {object}  httpx.UnauthorizedResponse "Unauthorized (only when Auth.Enabled=true)"
 // @Success      200  {object}  httpx.JSONResponse{data=SendTestNotification_Response}
 // @Failure      500  {object}  httpx.JSONResponse "Internal Server Error"

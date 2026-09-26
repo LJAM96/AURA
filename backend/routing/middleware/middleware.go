@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"aura/config"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/go-chi/chi/middleware"
@@ -27,13 +29,20 @@ Parameters:
 */
 func Configure(r *chi.Mux) {
 
-	AllowedOrigins := []string{"*"}
-
-	// CORS Middleware: Allow CORS for all origins (replace this with specific origins)
+	// CORS Middleware: the standard deployment (Next.js server proxying /api/* to this backend,
+	// see frontend/next.config.ts rewrites) is same-origin from the browser's perspective and
+	// never hits this at all - CORS only applies to genuine cross-origin requests. Wildcard +
+	// AllowCredentials is also rejected by browsers per spec, so this must be an explicit list;
+	// Auth.AllowedOrigins lets an admin opt a specific extra origin in if they're calling the API
+	// directly from somewhere else. Router is rebuilt on every config change (see NewRouter), so
+	// this always reflects the current config.
+	allowedOrigins := config.Current.Auth.AllowedOrigins
 	cors := cors.New(cors.Options{
-		AllowedOrigins:   AllowedOrigins,
+		AllowOriginFunc: func(origin string) bool {
+			return slices.Contains(allowedOrigins, origin)
+		},
 		AllowedMethods:   []string{"GET", "POST", "DELETE", "PATCH"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Api-Key"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300, // Maximum value not ignored by any of major browsers

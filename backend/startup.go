@@ -6,7 +6,6 @@ import (
 	"aura/database"
 	"aura/database/migration"
 	autodownload "aura/download/auto"
-	downloadqueue "aura/download/queue"
 	"aura/jobs"
 	"aura/logging"
 	"aura/mediaserver"
@@ -15,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 )
 
 func runBootstrap() (success bool) {
@@ -166,22 +164,11 @@ func runWarmup() (success bool) {
 	config.AppLoadingStep = "Starting Background Jobs"
 	jobs.StartAutoDownloadJob()
 
-	// Cronjob: Download Queue Processing
-	err := jobs.StartDownloadQueueJob()
-	if err != nil {
-		logging.LOGGER.Error().Timestamp().Err(err).Msg("Failed to schedule Download Queue Processing cron job")
-		downloadqueue.LatestInfo.Time = time.Now()
-		downloadqueue.LatestInfo.Status = downloadqueue.LAST_STATUS_ERROR
-		downloadqueue.LatestInfo.Message = "Failed to schedule Download Queue Processing"
-		downloadqueue.LatestInfo.Errors = []string{err.Error()}
-		downloadqueue.LatestInfo.Warnings = []string{}
-	} else {
-		downloadqueue.LatestInfo.Time = time.Now()
-		downloadqueue.LatestInfo.Status = downloadqueue.LAST_STATUS_IDLE
-	}
+	// Download Queue: Start the worker that processes download queue jobs from the database
+	jobs.StartDownloadQueueWorker(context.Background())
 
 	// Cronjob: Refresh Media Items and Collections
-	err = jobs.StartRefreshMediaItemsAndCollectionsJob()
+	err := jobs.StartRefreshMediaItemsAndCollectionsJob()
 	if err != nil {
 		logging.LOGGER.Error().Timestamp().Err(err).Msg("Failed to schedule Refresh Media Items and Collections cron job")
 	}

@@ -4,7 +4,7 @@ import { makePlural } from "@/helper/make_plural";
 import { finalizeOnboarding } from "@/services/config/onboarding-finalize";
 import { GetNotificationTemplateVariables } from "@/services/config/template-variables";
 import { UpdateAppConfig } from "@/services/config/update";
-import yaml from "js-yaml";
+import * as yaml from "js-yaml";
 import { toast } from "sonner";
 
 import type { JSX } from "react";
@@ -13,7 +13,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 
 import { ConfigSectionAuth } from "@/components/settings-onboarding/ConfigSectionAuth";
-import { ConfigSectionAutoDownload } from "@/components/settings-onboarding/ConfigSectionAutoDownload";
 import { ConfigSectionImages } from "@/components/settings-onboarding/ConfigSectionImages";
 import { ConfigSectionLabelsAndTags } from "@/components/settings-onboarding/ConfigSectionLabelsAndTags";
 import { ConfigSectionLogging } from "@/components/settings-onboarding/ConfigSectionLogging";
@@ -258,20 +257,6 @@ const OnboardingPage = () => {
         ),
       },
       {
-        key: "autodownload",
-        title: "Auto Download",
-        optional: true,
-        render: () => (
-          <ConfigSectionAutoDownload
-            value={configState.auto_download}
-            editing
-            dirtyFields={{}}
-            onChange={(f, v) => updateSectionField("auto_download", f, v)}
-            errorsUpdate={(errs) => updateSectionErrors("auto_download", errs as Record<string, string>)}
-          />
-        ),
-      },
-      {
         key: "sonarr_and_radarr",
         title: "Sonarr/Radarr",
         optional: true,
@@ -346,7 +331,6 @@ const OnboardingPage = () => {
     ],
     [
       configState.auth,
-      configState.auto_download,
       configState.images,
       configState.labels_and_tags,
       configState.logging,
@@ -387,7 +371,6 @@ const OnboardingPage = () => {
           if (finalizeResp.status === "success") {
             toast.success("Configuration applied successfully, redirecting...");
             if (configState.auth.enabled) {
-              localStorage.removeItem("aura-auth-token");
               setTimeout(() => (window.location.href = "/login"), 3000);
               return;
             }

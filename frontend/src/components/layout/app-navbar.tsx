@@ -1,11 +1,11 @@
 "use client";
 
-import { getAuthToken } from "@/services/auth/login";
+import { Logout } from "@/services/auth/logout";
 import {
   ArrowLeftCircle,
   ArrowRightCircle,
-  Bookmark as BookmarkIcon,
   Bell,
+  Bookmark as BookmarkIcon,
   Clock,
   FileCog as FileCogIcon,
   LayoutGrid,
@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { cn } from "@/lib/cn";
+import { DeepResetAllStores } from "@/lib/stores/clear-all-stores";
 import { useCollectionStore } from "@/lib/stores/global-store-collection-store";
 import { useMediaStore } from "@/lib/stores/global-store-media-store";
 import { useOnboardingStore } from "@/lib/stores/global-store-onboarding";
@@ -55,6 +56,7 @@ export function Navbar({ version = "dev" }: AppNavbarProps) {
   const isHomePage = pathName === "/";
   const isMediaPage = pathName.startsWith("/media-item") || pathName.startsWith("/media-item/");
   const isOnboardingPage = pathName === "/onboarding" || pathName === "/onboarding/";
+  const isLoginPage = pathName === "/login" || pathName === "/login/";
   const isLogsPage = pathName === "/logs" || pathName === "/logs/";
   const isChangeLogPage = pathName === "/change-log" || pathName === "/change-log/";
   const isCollectionItemPage = pathName.startsWith("/collection-item") || pathName.startsWith("/collection-item/");
@@ -93,10 +95,10 @@ export function Navbar({ version = "dev" }: AppNavbarProps) {
   // App Version Hook
   const { latestVersion, isNewerVersion } = useAppVersion(version);
 
-  // Fetch onboarding/status once on mount
+  // Fetch onboarding/status on mount, and again whenever the route changes
   useEffect(() => {
     void fetchStatus();
-  }, [fetchStatus]);
+  }, [fetchStatus, pathName]);
 
   // App Not Fully Loaded Redirect Logic
   useEffect(() => {
@@ -164,11 +166,8 @@ export function Navbar({ version = "dev" }: AppNavbarProps) {
       setIsAuthed(true);
       return;
     }
-
-    // If auth is enabled, check for token
-    const token = getAuthToken();
-    setIsAuthed(!!token && token !== "null" && token !== "undefined");
-  }, [pathName, status?.current_setup?.auth?.enabled]);
+    setIsAuthed(status !== null);
+  }, [pathName, status]);
 
   // When clicking on the logo, navigate to home
   // If already on homepage, reset home page states
@@ -189,11 +188,10 @@ export function Navbar({ version = "dev" }: AppNavbarProps) {
   };
 
   // Handle Logout
-  const handleLogout = () => {
-    localStorage.removeItem("aura-auth-token");
-    setIsAuthed(false);
-    // Redirect to login page
-    router.replace("/login");
+  const handleLogout = async () => {
+    await Logout(); // clears the HttpOnly session cookie server-side
+    await DeepResetAllStores();
+    window.location.href = "/login";
   };
 
   return (
@@ -256,105 +254,111 @@ export function Navbar({ version = "dev" }: AppNavbarProps) {
             />
           </>
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            asChild
-            className="cursor-pointer hover:brightness-120 active:scale-95 transition text-muted-foreground"
-          >
-            <MenuIcon
-              className={cn(
-                "w-8 h-8 ml-2",
-                isNewerVersion(latestVersion ?? "", version) && "text-yellow-500 animate-pulse"
-              )}
-            />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56 md:w-64" side="bottom" align="end">
-            {status && !status.needs_setup && (
-              <>
-                <DropdownMenuItem
-                  className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
-                  onClick={() => router.push("/saved-sets")}
-                >
-                  <BookmarkIcon className="w-6 h-6 mr-2" />
-                  Saved Sets
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
-                  onClick={() => router.push("/collections")}
-                >
-                  <LayoutGrid className="w-6 h-6 mr-2" />
-                  Collections
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
-                  onClick={() => router.push("/download-queue")}
-                >
-                  <ListOrdered className="w-6 h-6 mr-2" />
-                  Download Queue
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
-                  onClick={() => router.push("/subscriptions")}
-                >
-                  <Bell className="w-6 h-6 mr-2" />
-                  Subscriptions
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
-                  onClick={() => router.push("/settings")}
-                >
-                  <FileCogIcon className="w-6 h-6 mr-2" />
-                  Settings
-                </DropdownMenuItem>
-                {isWideScreen && (
-                  <DropdownMenuItem className="cursor-pointer flex items-center active:scale-95 hover:brightness-120">
-                    <ViewDensitySlider />
-                  </DropdownMenuItem>
+        {isAuthed && !isLoginPage && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              asChild
+              className="cursor-pointer hover:brightness-120 active:scale-95 transition text-muted-foreground"
+            >
+              <MenuIcon
+                className={cn(
+                  "w-8 h-8 ml-2",
+                  isNewerVersion(latestVersion ?? "", version) && "text-yellow-500 animate-pulse"
                 )}
-              </>
-            )}
-            <DropdownMenuItem
-              className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
-              onClick={() => router.push("/logs")}
-            >
-              <Logs className="w-6 h-6 mr-2" />
-              Logs
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
-              onClick={() => router.push("/jobs")}
-            >
-              <Clock className="w-6 h-6 mr-2" />
-              Jobs
-            </DropdownMenuItem>
-            {isNewerVersion(latestVersion ?? "", version) && (
-              <DropdownMenuItem
-                className="cursor-pointer flex items-center active:scale-95 hover:brightness-120 text-yellow-500 animate-pulse"
-                onClick={() =>
-                  router.push(
-                    `/change-log?currentVersion=${encodeURIComponent(version)}&updates=true&latestVersion=${encodeURIComponent(latestVersion ?? "")}`
-                  )
-                }
-              >
-                <Sparkles className="w-6 h-6 mr-2 text-yellow-500" />
-                New Version Available ({latestVersion})
-              </DropdownMenuItem>
-            )}
-            {isAuthed && status?.current_setup.auth.enabled && (
-              <>
-                <DropdownMenuSeparator />
+              />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56 md:w-64" side="bottom" align="end">
+              {status && !status.needs_setup && (
+                <>
+                  <DropdownMenuItem
+                    className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
+                    onClick={() => router.push("/saved-sets")}
+                  >
+                    <BookmarkIcon className="w-6 h-6 mr-2" />
+                    Saved Sets
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
+                    onClick={() => router.push("/collections")}
+                  >
+                    <LayoutGrid className="w-6 h-6 mr-2" />
+                    Collections
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
+                    onClick={() => router.push("/download-queue")}
+                  >
+                    <ListOrdered className="w-6 h-6 mr-2" />
+                    Download Queue
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
+                    onClick={() => router.push("/subscriptions")}
+                  >
+                    <Bell className="w-6 h-6 mr-2" />
+                    Subscriptions
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
+                    onClick={() => router.push("/settings")}
+                  >
+                    <FileCogIcon className="w-6 h-6 mr-2" />
+                    Settings
+                  </DropdownMenuItem>
+                  {isWideScreen && (
+                    <DropdownMenuItem className="cursor-pointer flex items-center active:scale-95 hover:brightness-120">
+                      <ViewDensitySlider />
+                    </DropdownMenuItem>
+                  )}
+                </>
+              )}
+              {status && !status.needs_setup && (
                 <DropdownMenuItem
-                  className="cursor-pointer flex items-center active:scale-95 hover:brightness-120 text-red-600 focus:text-red-700"
-                  onClick={handleLogout}
+                  className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
+                  onClick={() => router.push("/logs")}
                 >
-                  <LogOutIcon className="w-6 h-6 mr-2" />
-                  Logout
+                  <Logs className="w-6 h-6 mr-2" />
+                  Logs
                 </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+              )}
+              {status && !status.needs_setup && (
+                <DropdownMenuItem
+                  className="cursor-pointer flex items-center active:scale-95 hover:brightness-120"
+                  onClick={() => router.push("/jobs")}
+                >
+                  <Clock className="w-6 h-6 mr-2" />
+                  Jobs
+                </DropdownMenuItem>
+              )}
+              {isNewerVersion(latestVersion ?? "", version) && (
+                <DropdownMenuItem
+                  className="cursor-pointer flex items-center active:scale-95 hover:brightness-120 text-yellow-500 animate-pulse"
+                  onClick={() =>
+                    router.push(
+                      `/change-log?currentVersion=${encodeURIComponent(version)}&updates=true&latestVersion=${encodeURIComponent(latestVersion ?? "")}`
+                    )
+                  }
+                >
+                  <Sparkles className="w-6 h-6 mr-2 text-yellow-500" />
+                  New Version Available ({latestVersion})
+                </DropdownMenuItem>
+              )}
+              {isAuthed && status?.current_setup.auth.enabled && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="cursor-pointer flex items-center active:scale-95 hover:brightness-120 text-red-600 focus:text-red-700"
+                    onClick={handleLogout}
+                  >
+                    <LogOutIcon className="w-6 h-6 mr-2" />
+                    Logout
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </nav>
   );

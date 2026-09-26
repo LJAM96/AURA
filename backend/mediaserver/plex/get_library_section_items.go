@@ -73,6 +73,7 @@ func (p *Plex) GetLibrarySectionItems(ctx context.Context, section models.Librar
 		item.AddedAt = metadata.AddedAt
 		item.ContentRating = metadata.ContentRating
 		item.Summary = metadata.Summary
+		item.Edition = metadata.Edition
 
 		if item.Title == "" {
 			if metadata.OriginalTitle != "" {
@@ -141,7 +142,7 @@ func (p *Plex) GetLibrarySectionItems(ctx context.Context, section models.Librar
 		}
 
 		// Check if Media Item exists in DB
-		ignored, ignoredMode, sets, logErr := database.CheckIfMediaItemExists(ctx, item.TMDB_ID, item.LibraryTitle)
+		ignored, ignoredMode, sets, logErr := database.CheckIfMediaItemExists(ctx, item.TMDB_ID, item.LibraryTitle, item.Edition)
 		if logErr.Message != "" {
 			logAction.AppendWarning("message", "Failed to check if media item exists in database")
 			logAction.AppendWarning("error", Err)
@@ -149,12 +150,13 @@ func (p *Plex) GetLibrarySectionItems(ctx context.Context, section models.Librar
 		if !ignored {
 			item.DBSavedSets = sets
 		} else {
+			item.DBSavedSets = []models.DBSavedSet{}
 			item.IgnoredInDB = true
 			item.IgnoredMode = ignoredMode
 		}
 
 		// Update the Media Item on Server in the DB
-		updateErr := database.UpdateMediaItemOnServer(ctx, item.TMDB_ID, item.LibraryTitle, true)
+		updateErr := database.UpdateMediaItemOnServer(ctx, item.TMDB_ID, item.LibraryTitle, item.Edition, true)
 		if updateErr.Message != "" {
 			logAction.AppendWarning("update_on_server_error", updateErr.Message)
 		}

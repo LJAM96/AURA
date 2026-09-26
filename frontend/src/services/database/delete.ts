@@ -23,6 +23,7 @@ export const DeleteItemFromDB = async (deleteItem: DBSavedItem): Promise<APIResp
     const params = {
       tmdb_id: deleteItem.media_item.tmdb_id,
       library_title: deleteItem.media_item.library_title,
+      edition: deleteItem.media_item.edition,
     };
     const response = await apiClient.delete<APIResponse<DeleteItemFromDB_Response>>(`/db`, { params });
     if (response.data.status === "error") {
@@ -40,6 +41,7 @@ export const DeleteItemFromDB = async (deleteItem: DBSavedItem): Promise<APIResp
     clearMediaItemSavedSets({
       tmdbID: deleteItem.media_item.tmdb_id,
       libraryTitle: deleteItem.media_item.library_title,
+      edition: deleteItem.media_item.edition,
     });
     return response.data;
   } catch (error) {

@@ -120,7 +120,7 @@ func CheckItem(ctx context.Context, dbItem models.DBSavedItem) (result AutoDownl
 
 	// Get the base Show Media Item from the cache
 	_, actionGetFromCache := logging.AddSubActionToContext(ctx, fmt.Sprintf("Getting %s Item from cache", utils.MediaItemInfo(dbItem.MediaItem)), logging.LevelTrace)
-	mediaItem, found := cache.LibraryStore.GetMediaItemFromSectionByTMDBID(dbItem.MediaItem.LibraryTitle, dbItem.MediaItem.TMDB_ID)
+	mediaItem, found := cache.LibraryStore.GetMediaItemFromSectionByTMDBIDAndEdition(dbItem.MediaItem.LibraryTitle, dbItem.MediaItem.TMDB_ID, dbItem.MediaItem.Edition)
 	if !found || mediaItem == nil {
 		result.OverallResult = "error"
 		result.OverallMessage = "Media Item not found in cache"

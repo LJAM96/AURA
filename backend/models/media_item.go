@@ -29,6 +29,7 @@ type MediaItem struct {
 	// Used in MediaItem Details Page - For more information about the item
 	ContentRating string `json:"content_rating"` // Content rating (e.g., "PG-13")
 	Summary       string `json:"summary"`        // Summary or description of the media item
+	Edition       string `json:"edition"`        // Edition of the media item (e.g., "Director's Cut")
 }
 
 type MediaItemGuid struct {

@@ -9,7 +9,7 @@ import (
 	"fmt"
 )
 
-func applyImageToMediaItem(ctx context.Context, item *models.MediaItem, imageFile models.ImageFile, imageData []byte) (Err logging.LogErrorInfo) {
+func applyImageToMediaItem(ctx context.Context, item *models.MediaItem, imageFile models.ImageFile, imageData []byte, imageType string) (Err logging.LogErrorInfo) {
 	ctx, logAction := logging.AddSubActionToContext(ctx, fmt.Sprintf(
 		"%s: Applying %s Image for %s",
 		config.Current.MediaServer.Type, utils.GetFileDownloadName(item.Title, imageFile), utils.MediaItemInfo(*item),
@@ -28,7 +28,7 @@ func applyImageToMediaItem(ctx context.Context, item *models.MediaItem, imageFil
 	// Handling for Backdrops are different than Primary Images
 	if imageFile.Type != "backdrop" {
 		// Apply the Image to the Media Item
-		Err = uploadImage(ctx, item, itemRatingKey, imageFile, imageData)
+		Err = uploadImage(ctx, item, itemRatingKey, imageFile, imageData, imageType)
 		if Err.Message != "" {
 			return Err
 		}
@@ -46,7 +46,7 @@ func applyImageToMediaItem(ctx context.Context, item *models.MediaItem, imageFil
 		}
 
 		// Upload the new image
-		Err = uploadImage(ctx, item, itemRatingKey, imageFile, imageData)
+		Err = uploadImage(ctx, item, itemRatingKey, imageFile, imageData, imageType)
 		if Err.Message != "" {
 			return *logAction.Error
 		}

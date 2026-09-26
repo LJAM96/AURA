@@ -124,7 +124,13 @@ export function MediaItemDetails({
   };
 
   const handleAddToIgnoredClick = async (ignoreMode: string) => {
-    const addToDBResp = await IgnoreItemInDB(tmdbID, libraryTitle, ignoreMode, currentSetsAvailable);
+    const addToDBResp = await IgnoreItemInDB(
+      tmdbID,
+      libraryTitle,
+      ignoreMode,
+      currentSetsAvailable,
+      mediaItem?.edition || ""
+    );
     if (addToDBResp.status === "error") {
       toast.error(`Failed to add ${title} to DB: ${addToDBResp.error?.message || "Unknown error"}`);
       return;
@@ -149,7 +155,7 @@ export function MediaItemDetails({
       return;
     }
 
-    const addToDBResp = await StopIgnoringItemInDB(mediaItem.tmdb_id, mediaItem.library_title);
+    const addToDBResp = await StopIgnoringItemInDB(mediaItem.tmdb_id, mediaItem.library_title, mediaItem.edition);
     if (addToDBResp.status === "error") {
       toast.error(`Failed to stop ignoring ${title}`);
       return;
@@ -218,6 +224,9 @@ export function MediaItemDetails({
 
             {/* Content Rating */}
             {contentRating && <Badge className="flex items-center text-sm">{contentRating}</Badge>}
+
+            {/* Edition */}
+            {mediaItem?.edition && <Badge className="flex items-center text-sm">Edition: {mediaItem.edition}</Badge>}
 
             {status ? (
               <Badge

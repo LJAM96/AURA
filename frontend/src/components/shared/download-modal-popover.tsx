@@ -2,11 +2,7 @@ import { PopoverHelp } from "@/components/shared/popover-help";
 
 export interface DownloadModalPopoverProps {
   type:
-    | "autodownload"
-    | "add-to-db-only"
-    | "add-to-queue-only"
-    | "auto-add-new-collection-items"
-    | "possible-future-types";
+    "autodownload" | "add-to-db-only" | "add-to-queue-only" | "auto-add-new-collection-items" | "possible-future-types";
 }
 
 const downloadModalPopoverHelpText = {
@@ -19,7 +15,7 @@ const downloadModalPopoverHelpText = {
   "auto-add-new-collection-items":
     "Auto Add New Collection Items will check periodically for new items added to this collection and automatically download the images for them",
   "possible-future-types":
-    "These image types are not currently available in this set. Selecting them saves the type in your database for this set, so future auto-download checks can download them when they are added.",
+    "These image types are not currently available in this Set or Media Item. Selecting them saves the type in your database for this set, so future auto-download checks can download them when they are added.",
 };
 
 const DownloadModalPopover: React.FC<DownloadModalPopoverProps> = ({ type }) => {

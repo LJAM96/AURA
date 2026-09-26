@@ -48,7 +48,8 @@ func DefaultNotificationTemplates() Config_NotificationTemplate {
 func DefaultConfig() Config {
 	return Config{
 		Auth: Config_Auth{
-			Enabled: false,
+			Enabled:             false,
+			SessionCookieSecure: "auto",
 		},
 		Logging: Config_Logging{
 			Level: "INFO",
@@ -56,10 +57,7 @@ func DefaultConfig() Config {
 		Mediux: Config_Mediux{
 			DownloadQuality: "optimized",
 		},
-		AutoDownload: Config_AutoDownload{
-			Enabled: false,
-			Cron:    "0 0 * * *",
-		},
+		Jobs: DefaultJobsConfig(),
 		Images: Config_Images{
 			CacheImages: Config_CacheImages{
 				Enabled: false,
@@ -72,6 +70,59 @@ func DefaultConfig() Config {
 			Enabled:              false,
 			Providers:            []Config_Notification_Provider{},
 			NotificationTemplate: DefaultNotificationTemplates(),
+		},
+	}
+}
+
+var JobDefaults = struct {
+	AutoDownload                    JobSettingDefault
+	RefreshMediaItemsAndCollections JobSettingDefault
+	CheckForMediaItemChanges        JobSettingDefault
+	HandleTempIgnoredItems          JobSettingDefault
+	RefreshMediuxUsers              JobSettingDefault
+	CheckMediuxSiteLink             JobSettingDefault
+	SubscriptionCheck               JobSettingDefault
+}{
+	AutoDownload:                    JobSettingDefault{Enabled: true, Cron: "0 0 * * *"},
+	RefreshMediaItemsAndCollections: JobSettingDefault{Enabled: true, Cron: "0 4 * * *"},
+	CheckForMediaItemChanges:        JobSettingDefault{Enabled: true, Cron: "0 */6 * * *"},
+	HandleTempIgnoredItems:          JobSettingDefault{Enabled: true, Cron: "0 */6 * * *"},
+	RefreshMediuxUsers:              JobSettingDefault{Enabled: true, Cron: "0 */12 * * *"},
+	CheckMediuxSiteLink:             JobSettingDefault{Enabled: true, Cron: "0 */1 * * *"},
+	SubscriptionCheck:               JobSettingDefault{Enabled: true, Cron: "0 */6 * * *"},
+}
+
+func boolPtr(b bool) *bool { return new(b) }
+
+func DefaultJobsConfig() Config_Jobs {
+	return Config_Jobs{
+		AutoDownload: Config_JobSetting{
+			Enabled: boolPtr(JobDefaults.AutoDownload.Enabled),
+			Cron:    JobDefaults.AutoDownload.Cron,
+		},
+		RefreshMediaItemsAndCollections: Config_JobSetting{
+			Enabled: boolPtr(JobDefaults.RefreshMediaItemsAndCollections.Enabled),
+			Cron:    JobDefaults.RefreshMediaItemsAndCollections.Cron,
+		},
+		CheckForMediaItemChanges: Config_JobSetting{
+			Enabled: boolPtr(JobDefaults.CheckForMediaItemChanges.Enabled),
+			Cron:    JobDefaults.CheckForMediaItemChanges.Cron,
+		},
+		HandleTempIgnoredItems: Config_JobSetting{
+			Enabled: boolPtr(JobDefaults.HandleTempIgnoredItems.Enabled),
+			Cron:    JobDefaults.HandleTempIgnoredItems.Cron,
+		},
+		RefreshMediuxUsers: Config_JobSetting{
+			Enabled: boolPtr(JobDefaults.RefreshMediuxUsers.Enabled),
+			Cron:    JobDefaults.RefreshMediuxUsers.Cron,
+		},
+		CheckMediuxSiteLink: Config_JobSetting{
+			Enabled: boolPtr(JobDefaults.CheckMediuxSiteLink.Enabled),
+			Cron:    JobDefaults.CheckMediuxSiteLink.Cron,
+		},
+		SubscriptionCheck: Config_JobSetting{
+			Enabled: boolPtr(JobDefaults.SubscriptionCheck.Enabled),
+			Cron:    JobDefaults.SubscriptionCheck.Cron,
 		},
 	}
 }

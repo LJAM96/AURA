@@ -5,7 +5,9 @@ import (
 	routes_auth "aura/routing/auth"
 	routes_base "aura/routing/base"
 	"aura/routing/middleware"
+	"context"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
@@ -36,6 +38,12 @@ func NewRouter() *chi.Mux {
 		routes_auth.SetTokenAuth(jwtauth.New("HS256", []byte(secret), nil))
 		logging.LOGGER.Info().Timestamp().Msg("JWT Token Auth initialized successfully")
 	}
+
+	// Initialize OIDC (no-op if disabled). Bounded timeout so a slow/unreachable IdP can't hang
+	// router (re)creation - if discovery fails, OIDC login is simply left unavailable.
+	oidcCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	routes_auth.InitOIDC(oidcCtx)
+	cancel()
 
 	// Add the routes to the router
 	AddRoutes(r)
