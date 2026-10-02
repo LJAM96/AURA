@@ -10,6 +10,7 @@ import (
 	"aura/logging"
 	"aura/mediaserver"
 	"aura/mediux"
+	"aura/routing"
 	"aura/utils"
 	"context"
 	"fmt"
@@ -110,25 +111,19 @@ func runPreFlight() (success bool) {
 	return success
 }
 
-func runWarmup() (success bool) {
-	ctx, ld := logging.CreateLoggingContext(context.Background(), "Warmup")
+func runWarmupCritical(ctx context.Context) (success bool) {
+	ctx, ld := logging.CreateLoggingContext(ctx, "WarmupCritical")
+	defer ld.Log()
+	config.AppLoadingStep = "Initializing Database"
 
-	action := ld.AddAction("Initializing Application", logging.LevelInfo)
+	action := ld.AddAction("Initializing Application Database", logging.LevelInfo)
 	ctx = logging.WithCurrentAction(ctx, action)
-	config.AppLoadingStep = "Warming Up Application"
+	defer action.Complete()
 
 	success = false
 
-	// Cache: Add all MediUX users
-	config.AppLoadingStep = "Preloading MediUX Users into Cache"
-	mediux.PreloadMediuxUsers(ctx)
-
-	// Cache: Get a list of all items in MediUX that has a set
-	config.AppLoadingStep = "Preloading MediUX Items with Sets into Cache"
-	mediux.PreLoadMediuxItemsWithSets(ctx)
-
-	// Database: Initialize
-	config.AppLoadingStep = "Initializing Database"
+	// Database: Initialize (required before serving full routes — detail/image
+	// endpoints and saved-set lookups query the DB on every request)
 	newDB, dbInitErr := database.Init(ctx)
 	if dbInitErr.Message != "" {
 		return false
@@ -142,7 +137,29 @@ func runWarmup() (success bool) {
 		logging.LOGGER.Info().Timestamp().Msgf("%d database migrations performed", migrationsCompleted)
 	}
 
-	// Cache: Add all media server sections and items
+	success = true
+	return success
+}
+
+func runWarmupBackground() {
+	ctx, ld := logging.CreateLoggingContext(context.Background(), "WarmupBackground")
+	defer ld.Log()
+
+	action := ld.AddAction("Refreshing Library Data in Background", logging.LevelInfo)
+	ctx = logging.WithCurrentAction(ctx, action)
+	defer action.Complete()
+
+	// Cache: Add all MediUX users
+	config.AppLoadingStep = "Preloading MediUX Users into Cache"
+	mediux.PreloadMediuxUsers(ctx)
+
+	// Cache: Get a list of all items in MediUX that has a set
+	config.AppLoadingStep = "Preloading MediUX Items with Sets into Cache"
+	mediux.PreLoadMediuxItemsWithSets(ctx)
+
+	// Cache: Add all media server sections and items (slow on large libraries —
+	// the API already serves full routes from whatever is cached so far, plus
+	// live-fetch fallbacks for items not yet scanned)
 	config.AppLoadingStep = "Preloading Media Server Data into Cache"
 	_ = mediaserver.GetAllLibrarySectionsAndItems(ctx, false)
 	logging.LOGGER.Info().Timestamp().Int("sections", cache.LibraryStore.GetSectionsCount()).Int("items", cache.LibraryStore.GetItemsCount()).Msg("Loaded Media Server sections and items into cache")
@@ -154,11 +171,9 @@ func runWarmup() (success bool) {
 	vacuumErr := database.Vacuum(ctx)
 	if vacuumErr.Message != "" {
 		logging.LOGGER.Error().Timestamp().Msgf("Database VACUUM failed: %s", vacuumErr.Message)
-		return false
 	}
 
 	action.Complete()
-	ld.Log()
 
 	// Cronjob: Auto Download Processing
 	config.AppLoadingStep = "Starting Background Jobs"
@@ -216,8 +231,11 @@ func runWarmup() (success bool) {
 	// Initialize Media Server WebSocket Listener (if supported)
 	autodownload.StartOrRestartPlexWebSocketClient()
 
-	success = true
-	return success
+	// Mark the app fully loaded and swap to a fresh full router.
+	config.AppFullyLoaded = true
+	config.AppLoadingStep = "App Fully Loaded"
+	activeHandler.Store(routing.NewRouter())
+	logging.LOGGER.Info().Timestamp().Msg("Background library refresh complete. Main routes active.")
 }
 
 func startAPI() {

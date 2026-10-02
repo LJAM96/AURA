@@ -8,8 +8,10 @@ import { GlobalStore } from "@/lib/stores/stores";
 
 import type { LibrarySection, MediaItem, SelectedTypes } from "@/types/media-and-posters/media-item-and-library";
 
-// Max Cache Duration: 1 Hour
-export const MAX_CACHE_DURATION = 60 * 60 * 1000;
+// Max Cache Duration: 24 Hours (large libraries take many minutes to fully load;
+// the sections are only refreshed by homepage load, so a 1h TTL meant the cache
+// almost never survived long enough to be reused)
+export const MAX_CACHE_DURATION = 24 * 60 * 60 * 1000;
 
 // Dedupes by TMDB ID + Edition, so multiple editions of the same TMDB item
 // (e.g. Theatrical vs Director's Cut) are kept as distinct entries.

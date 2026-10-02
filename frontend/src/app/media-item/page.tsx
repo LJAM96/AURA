@@ -15,7 +15,7 @@ import {
   ChartBarIncreasing,
 } from "lucide-react";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -45,14 +45,14 @@ import { TYPE_MEDIA_ITEM_TYPE_OPTIONS } from "@/types/ui-options";
 
 const MediaItemPage = () => {
   const router = useRouter();
-  const isMounted = useRef(false);
 
   // Partial Media Item States
   const partialMediaItem = useMediaStore((state) => state.mediaItem);
 
   // Library Sections States (From Library Section Store)
+  // Optional only: used for the cross-library badge. Detail fetch must NOT block on this
+  // (homepage takes many minutes to fully load on large libraries).
   const librarySectionsMap = useLibrarySectionsStore((state) => state.sections);
-  const librarySectionsHasHydrated = useLibrarySectionsStore((state) => state.hasHydrated);
 
   // Response Loading State
   const [responseLoading, setResponseLoading] = useState<boolean>(true);
@@ -143,12 +143,11 @@ const MediaItemPage = () => {
     }
   }, [mediaItem]);
 
-  // 1. If no partial media item, show error and stop further effects
+  // 1. If no partial media item, show error and stop further effects.
+  // Note: no isMounted skip here — with the skip, opening /media-item directly
+  // (or before the media store hydrates and never re-renders) left responseLoading
+  // true forever on the Loading screen instead of showing the error.
   useEffect(() => {
-    if (!isMounted.current) {
-      isMounted.current = true;
-      return;
-    }
     if (!partialMediaItem) {
       setHasError(true);
       setError(ReturnErrorMessage("No media item selected. Please go back and select a media item."));
@@ -159,10 +158,12 @@ const MediaItemPage = () => {
     setError(null);
   }, [partialMediaItem]);
 
-  // 2. Fetch full media item from server when partialMediaItem and librarySectionsMap are ready
+  // 2. Fetch full media item from server when partialMediaItem is ready.
+  // Library sections are intentionally NOT a gate here: homepage can take many
+  // minutes to fully load on large libraries, and detail (Plex + MediUX) works
+  // fine without them. Cross-library badge is recomputed in 2b when sections arrive.
   useEffect(() => {
-    if (!librarySectionsHasHydrated) return;
-    if (!partialMediaItem || Object.keys(librarySectionsMap).length === 0) return;
+    if (!partialMediaItem) return;
     if (mediaItem && mediaItem.rating_key === partialMediaItem.rating_key) return;
     if (hasError) return;
     if (responseLoading === true && mediaItem !== null) return;
@@ -283,7 +284,31 @@ const MediaItemPage = () => {
     };
 
     fetchMediaItem();
-  }, [librarySectionsHasHydrated, hasError, responseLoading, partialMediaItem, librarySectionsMap, mediaItem]);
+  }, [hasError, responseLoading, partialMediaItem, librarySectionsMap, mediaItem]);
+
+  // 2b. Recompute cross-library match when library sections finish loading.
+  // The detail fetch above is intentionally not blocked on this; without this effect
+  // the badge would stay empty when detail loaded before homepage completed.
+  useEffect(() => {
+    if (!mediaItem) return;
+    const otherSections = Object.values(librarySectionsMap).filter(
+      (s) => s.type === mediaItem.type && s.title !== mediaItem.library_title
+    );
+    if (!otherSections || otherSections.length === 0) return;
+    if (!mediaItem.guids?.length) return;
+    const tmdbID = mediaItem.guids.find((guid) => guid.provider === "tmdb")?.id;
+    if (!tmdbID) return;
+    for (const section of otherSections) {
+      if (!section.media_items || section.media_items.length === 0) continue;
+      const otherMediaItem = section.media_items.find((item) =>
+        item.guids?.some((guid) => guid.provider === "tmdb" && guid.id === tmdbID)
+      );
+      if (otherMediaItem) {
+        setOtherLibraryMediaItems([otherMediaItem]);
+        break;
+      }
+    }
+  }, [mediaItem, librarySectionsMap]);
 
   // 3. Filtering logic for poster sets
   useEffect(() => {

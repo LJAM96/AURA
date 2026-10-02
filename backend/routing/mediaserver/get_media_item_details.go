@@ -50,14 +50,14 @@ func GetMediaItemDetails(w http.ResponseWriter, r *http.Request) {
 		returnType = "full" // Default to full details
 	}
 
-	// Get the Media Item from the cache
+	// Get the Media Item from the cache. During the background library refresh
+	// after startup the item may not be scanned yet — fall back to a live fetch
+	// by rating key instead of 404ing (Plex lookup only needs the rating key
+	// and backfills the cache on success).
 	mediaItem, found := cache.LibraryStore.GetMediaItemByRatingKey(ratingKey)
 	if !found {
-		actionGetQueryParams.SetError("Media item not found in cache", "Make sure the rating_key is correct and the media server is connected", map[string]any{
-			"rating_key": ratingKey,
-		})
-		httpx.SendResponse(w, ld, response)
-		return
+		logAction.AppendResult("cache_miss_fallback", "fetching live from media server by rating_key")
+		mediaItem = &models.MediaItem{RatingKey: ratingKey}
 	}
 
 	// Get detailed info from the media server

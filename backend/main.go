@@ -18,6 +18,7 @@ import (
 	"aura/logging"
 	"aura/notification"
 	"aura/routing"
+	"context"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -60,14 +61,18 @@ func main() {
 				logging.LOGGER.Error().Timestamp().Msg("Preflight failed during OnboardingComplete, not swapping routers")
 				return
 			}
-			warmupSuccess := runWarmup()
-			if !warmupSuccess {
-				logging.LOGGER.Fatal().Timestamp().Msg("Warmup failed during OnboardingComplete. Exiting application.")
+			// Init the database synchronously (fast, required by full routes),
+			// then serve full routes immediately while the slow library scan
+			// refreshes in the background.
+			if !runWarmupCritical(context.Background()) {
+				logging.LOGGER.Fatal().Timestamp().Msg("Database init failed during OnboardingComplete. Exiting application.")
 				return
 			}
-			config.AppFullyLoaded = true
+			config.AppFullyLoaded = false
+			config.AppLoadingStep = "Serving API - background library refresh in progress"
 			activeHandler.Store(routing.NewRouter())
-			logging.LOGGER.Info().Timestamp().Msg("Onboarding complete. Main routes active.")
+			go runWarmupBackground()
+			logging.LOGGER.Info().Timestamp().Msg("Onboarding complete. Main routes active (library refresh in background).")
 		}
 
 		if bootStrapSuccess {
@@ -78,14 +83,18 @@ func main() {
 				return
 			}
 
-			warmupSuccess := runWarmup()
-			if !warmupSuccess {
-				logging.LOGGER.Fatal().Timestamp().Msg("Warmup failed. Exiting application.")
+			// Init the database synchronously (fast, required by full routes),
+			// then serve full routes immediately while the slow library scan
+			// (74k+ items can take 15+ minutes) refreshes in the background.
+			// Search/detail/image endpoints work on whatever is cached so far,
+			// with live-fetch fallbacks for items not yet scanned.
+			if !runWarmupCritical(context.Background()) {
+				logging.LOGGER.Fatal().Timestamp().Msg("Database init failed. Exiting application.")
 				os.Exit(1)
 			}
 
-			config.AppFullyLoaded = true
-			config.AppLoadingStep = "App Fully Loaded"
+			config.AppFullyLoaded = false
+			config.AppLoadingStep = "Serving API - background library refresh in progress"
 			// Send App Start Notification
 			// Send notification (only if not dev & notifications enabled)
 			if !strings.Contains(APP_VERSION, "dev") &&
@@ -94,7 +103,9 @@ func main() {
 			} else {
 				logging.LOGGER.Warn().Timestamp().Bool("notifications_enabled", config.Current.Notifications.Enabled).Bool("dev_version", strings.Contains(APP_VERSION, "dev")).Msg("App start notification not sent")
 			}
-			activeHandler.Store(routing.NewRouter()) // swap to full routes
+			activeHandler.Store(routing.NewRouter()) // swap to full routes now
+			go runWarmupBackground()
+			logging.LOGGER.Info().Timestamp().Msg("Main routes active (library refresh in background).")
 			return
 		}
 

@@ -4,6 +4,7 @@ import (
 	"aura/cache"
 	"aura/logging"
 	"aura/mediaserver"
+	"aura/models"
 	"aura/utils/httpx"
 	"net/http"
 )
@@ -52,15 +53,14 @@ func GetMediaItemImage(w http.ResponseWriter, r *http.Request) {
 	}
 	actionGetQueryParams.Complete()
 
-	// Get the matching media item from the cache
+	// Get the matching media item from the cache. During the background library
+	// refresh after startup the item may not be scanned yet — fall back to a
+	// stub since the Plex image fetch only needs the rating key (the item is
+	// only used for logging).
 	item, found := cache.LibraryStore.GetMediaItemByRatingKey(ratingKey)
 	if !found {
-		logAction.SetError("Media Item Not Found", "No media item found matching the provided rating key",
-			map[string]any{
-				"rating_key": ratingKey,
-			})
-		httpx.SendResponse(w, ld, nil)
-		return
+		logAction.AppendResult("cache_miss_fallback", "fetching image live from media server by rating_key")
+		item = &models.MediaItem{RatingKey: ratingKey}
 	}
 
 	// If the image does not exist, then get it from the media server
