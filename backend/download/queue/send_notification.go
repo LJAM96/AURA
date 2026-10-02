@@ -9,7 +9,6 @@ import (
 	"aura/utils"
 	"context"
 	"fmt"
-	"time"
 )
 
 func SendNotification(
@@ -35,15 +34,6 @@ func SendNotification(
 	if !config.Current.Notifications.NotificationTemplate.DownloadQueue.Enabled {
 		logging.LOGGER.Debug().Timestamp().Msg("Download queue notification is disabled, skipping app start notification")
 		return
-	}
-
-	var result Status
-	if len(fileIssues.Errors) > 0 {
-		result = LAST_STATUS_ERROR
-	} else if len(fileIssues.Warnings) > 0 {
-		result = LAST_STATUS_WARNING
-	} else {
-		result = LAST_STATUS_SUCCESS
 	}
 
 	if posterSet.ID == "" {
@@ -72,13 +62,6 @@ func SendNotification(
 	if config.Current.Notifications.NotificationTemplate.DownloadQueue.IncludeImage {
 		imageURL = getImageURLFromPosterSet(posterSet, tmdbPoster, tmdbBackdrop)
 	}
-
-	// Update the Global LatestInfo
-	LatestInfo.Time = time.Now()
-	LatestInfo.Status = result
-	LatestInfo.Message = fmt.Sprintf("%s (Set: %s)", mediaItem.Title, posterSet.ID)
-	LatestInfo.Errors = fileIssues.Errors
-	LatestInfo.Warnings = fileIssues.Warnings
 
 	ctx, ld := logging.CreateLoggingContext(context.Background(), "Notification - Send Download Queue Update")
 	logAction := ld.AddAction("Sending Download Queue Notification", logging.LevelInfo)

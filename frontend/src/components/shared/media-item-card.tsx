@@ -103,6 +103,9 @@ const HomeMediaItemCard: React.FC<HomeMediaItemCardProps> = ({ item }) => {
             </Badge>
           )}
         </div>
+        <div className="flex flex-row gap-2 mt-1">
+          {isMediaItem(item) && item.edition && <Badge className="flex items-center text-xs">{item.edition}</Badge>}
+        </div>
         {/* Title */}
         {item.title && (
           <span className="text-center text-md text-foreground font-semibold mt-2 mb-2">

@@ -259,6 +259,10 @@ const DownloadModal: React.FC<DownloadModalProps> = ({
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
 
+  // True when formItems spans more than one library (e.g. the same title also downloading
+  // to another library), so each item's card can be labeled with which library it belongs to.
+  const showLibraryNames = new Set(formItems.map((item) => item.MediaItem.library_title)).size > 1;
+
   // Download Progress
   const [progress, setProgress] = useState<DownloadProgress>({
     currentText: "",
@@ -341,9 +345,11 @@ const DownloadModal: React.FC<DownloadModalProps> = ({
     const setHasPoster = item.Set.images.some((img) => img.type === "poster");
     const setHasBackdrop = item.Set.images.some((img) => img.type === "backdrop");
     const setHasSeasonPosters = item.Set.images.some((img) => img.type === "season_poster" && img.season_number !== 0);
-    const setHasSpecialSeasonPosters = item.Set.images.some(
-      (img) => img.type === "season_poster" && img.season_number === 0
-    );
+    const mediaItemHasSpecialSeason =
+      item.MediaItem.series?.seasons?.some((season) => season.season_number === 0) ?? false;
+    const setHasSpecialSeasonPosters =
+      mediaItemHasSpecialSeason &&
+      item.Set.images.some((img) => img.type === "season_poster" && img.season_number === 0);
     const setHasTitleCards = item.Set.images.some((img) => img.type === "titlecard");
     const types: (TYPE_DOWNLOAD_IMAGE_TYPE_OPTIONS | null)[] = [
       setHasPoster ? "poster" : null,
@@ -1050,6 +1056,10 @@ const DownloadModal: React.FC<DownloadModalProps> = ({
               </span>
             </FormLabel>
 
+            {showLibraryNames && (
+              <p className="text-xs text-muted-foreground -mt-3 mb-3">{item.MediaItem.library_title}</p>
+            )}
+
             <div className="space-y-2">
               {existingAssetTypes.map((assetType) => (
                 <div key={assetType}>
@@ -1260,7 +1270,6 @@ const DownloadModal: React.FC<DownloadModalProps> = ({
         items: {},
       });
 
-      // Your download logic here
       log("INFO", "Download Modal", "Debug Info", "Form submitted with data:", data);
       log("INFO", "Download Modal", "Debug Info", "Progress:", progress);
       log("INFO", "Download Modal", "Debug Info", "Selected Types:", { watchSelectedOptions });
@@ -1908,7 +1917,11 @@ const DownloadModal: React.FC<DownloadModalProps> = ({
                       {(() => {
                         const titles = formItems
                           .filter((item) => watchSelectedOptions?.[item.MediaItem.rating_key]?.addToDBOnly)
-                          .map((item) => item.MediaItem.title);
+                          .map((item) =>
+                            showLibraryNames
+                              ? `${item.MediaItem.title} (${item.MediaItem.library_title})`
+                              : item.MediaItem.title
+                          );
 
                         if (titles.length === 0) return "";
                         if (titles.length === 1)

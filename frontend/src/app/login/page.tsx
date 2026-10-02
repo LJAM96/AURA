@@ -1,11 +1,12 @@
 "use client";
 
+import { GetAuthMethods } from "@/services/auth/auth-methods";
 import { AttemptLogin } from "@/services/auth/login";
-import { Eye, EyeOff, Loader2, Lock } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, ShieldCheck } from "lucide-react";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -15,26 +16,51 @@ import { Label } from "@/components/ui/label";
 
 import { useOnboardingStore } from "@/lib/stores/global-store-onboarding";
 
-export default function LoginPage() {
+const OIDC_ERROR_MESSAGES: Record<string, string> = {
+  oidc_unavailable: "Single sign-on is not currently available. Try your password instead.",
+  oidc_failed: "Single sign-on login failed. Please try again.",
+  oidc_not_allowed: "Your identity provider account is not permitted to access this app.",
+};
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const [passwordEnabled, setPasswordEnabled] = useState(true);
+  const [oidcEnabled, setOidcEnabled] = useState(false);
+
   // Get Onboarding Status
   const status = useOnboardingStore((state) => state.status);
   const hasHydrated = useOnboardingStore((state) => state.hasHydrated);
 
+  // If onboarding is complete and auth is disabled, there's nothing to log in to.
   useEffect(() => {
-    const token = localStorage.getItem("aura-auth-token");
-    if (token && token.length > 0 && token !== "null" && token !== "undefined") {
-      router.replace("/");
-    } else if (hasHydrated && status && status.current_setup.auth.enabled === false) {
-      // If onboarding is complete and auth is disabled, redirect to /
+    if (hasHydrated && status && status.current_setup.auth.enabled === false) {
       router.replace("/");
     }
   }, [hasHydrated, router, status]);
+
+  // Which login methods are available (password / OIDC SSO) - public endpoint, safe pre-login.
+  useEffect(() => {
+    void GetAuthMethods().then((resp) => {
+      if (resp.status !== "error" && resp.data) {
+        setPasswordEnabled(resp.data.password_enabled);
+        setOidcEnabled(resp.data.oidc_enabled);
+      }
+    });
+  }, []);
+
+  // Surface any error redirected back from the OIDC callback.
+  useEffect(() => {
+    const oidcError = searchParams.get("error");
+    if (oidcError) {
+      setErrorMsg(OIDC_ERROR_MESSAGES[oidcError] || "Login failed. Please try again.");
+    }
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -46,9 +72,8 @@ export default function LoginPage() {
     try {
       setLoading(true);
       const resp = await AttemptLogin(password);
-      const token = (resp as { data?: { token?: string } })?.data?.token || (resp as { token?: string })?.token;
-      if (!token) {
-        throw new Error(typeof resp?.data === "string" ? resp.data : "Invalid Password");
+      if (resp.status === "error" || !resp.data?.authenticated) {
+        throw new Error(resp.error?.message || "Invalid Password");
       }
       router.replace("/");
     } catch (err: unknown) {
@@ -65,51 +90,80 @@ export default function LoginPage() {
           <CardTitle className="flex items-center gap-2 text-2xl">
             <Lock className="h-6 w-6" /> Sign In
           </CardTitle>
-          <CardDescription>Enter your password to access aura.</CardDescription>
+          <CardDescription>Sign in to access aura.</CardDescription>
         </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            {errorMsg && (
-              <Alert variant="destructive">
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription>{errorMsg}</AlertDescription>
-              </Alert>
-            )}
-            <div className="mb-4">
-              <Label className="mb-2 font-medium" htmlFor="password">
-                Password
-              </Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPw ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  disabled={loading}
-                  className="pr-10" // add padding so text doesn't run under the icon
-                />
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowPw(!showPw)}
-                  aria-label={showPw ? "Hide password" : "Show password"}
-                  className="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  disabled={loading}
-                >
-                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
+        <CardContent className="space-y-4">
+          {errorMsg && (
+            <Alert variant="destructive">
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{errorMsg}</AlertDescription>
+            </Alert>
+          )}
+
+          {oidcEnabled && (
+            <a href="/api/auth/oidc/login" className="block">
+              <Button type="button" variant="outline" className="w-full">
+                <ShieldCheck className="mr-2 h-4 w-4" />
+                Sign in with SSO
+              </Button>
+            </a>
+          )}
+
+          {oidcEnabled && passwordEnabled && (
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <div className="h-px flex-1 bg-border" />
+              or
+              <div className="h-px flex-1 bg-border" />
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-col gap-3">
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {loading ? "Signing In..." : "Sign In"}
-            </Button>
-          </CardFooter>
-        </form>
+          )}
+
+          {passwordEnabled && (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <Label className="mb-2 font-medium" htmlFor="password">
+                  Password
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPw ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    disabled={loading}
+                    className="pr-10" // add padding so text doesn't run under the icon
+                  />
+                  <Button
+                    variant="ghost"
+                    onClick={() => setShowPw(!showPw)}
+                    aria-label={showPw ? "Hide password" : "Show password"}
+                    className="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    disabled={loading}
+                    type="button"
+                  >
+                    {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <CardFooter className="flex flex-col gap-3 px-0">
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {loading ? "Signing In..." : "Sign In"}
+                </Button>
+              </CardFooter>
+            </form>
+          )}
+        </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

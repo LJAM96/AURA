@@ -5,21 +5,12 @@ import ReactMarkdown from "react-markdown";
 
 interface ChangelogMarkdownProps {
   currentVersion?: string | null;
-  latestVersion?: string | null;
   children: string;
 }
 
-export function ChangelogMarkdown({ currentVersion, latestVersion, children }: ChangelogMarkdownProps) {
+export function ChangelogMarkdown({ currentVersion, children }: ChangelogMarkdownProps) {
   return (
     <div>
-      {latestVersion && currentVersion && (
-        <>
-          <div className="my-6 flex items-center gap-3">
-            <hr className="flex-grow border-amber-400 border-t-2" />
-          </div>
-          <h2 className="text-xl font-bold mb-4 text-amber-700 text-center">Updates since {currentVersion}</h2>
-        </>
-      )}
       <ReactMarkdown
         components={{
           a: ({ href, children, ...props }) => {

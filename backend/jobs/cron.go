@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"aura/config"
 	"aura/logging"
 	"fmt"
 	"sync"
@@ -9,26 +10,114 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+// JobKey is a stable identifier for a background job
+type JobKey string
+
+const (
+	JobKeyAutoDownload                    JobKey = "auto_download"
+	JobKeyRefreshMediaItemsAndCollections JobKey = "refresh_media_items_and_collections"
+	JobKeyCheckForMediaItemChanges        JobKey = "check_for_media_item_changes"
+	JobKeyHandleTempIgnoredItems          JobKey = "handle_temp_ignored_items"
+	JobKeyRefreshMediuxUsers              JobKey = "refresh_mediux_users"
+	JobKeyCheckMediuxSiteLink             JobKey = "check_mediux_site_link"
+	JobKeySubscriptionCheck               JobKey = "subscription_check"
+)
+
+type jobDefinition struct {
+	Key         JobKey
+	Name        string
+	Description string
+	Setting     func() config.Config_JobSetting
+	Default     config.JobSettingDefault
+	Start       func() error
+	RunNow      func()
+}
+
+var jobDefinitions = []jobDefinition{
+	{
+		Key:         JobKeyRefreshMediaItemsAndCollections,
+		Name:        "Refresh Media Items and Collections Job",
+		Description: "Re-scans your Media Server libraries, pulling in new and updated movies, shows, and collections to update the backend cache.",
+		Setting:     func() config.Config_JobSetting { return config.Current.Jobs.RefreshMediaItemsAndCollections },
+		Default:     config.JobDefaults.RefreshMediaItemsAndCollections,
+		Start:       StartRefreshMediaItemsAndCollectionsJob,
+		RunNow:      RunRefreshMediaItemsAndCollectionsJobNow,
+	},
+	{
+		Key:         JobKeyCheckForMediaItemChanges,
+		Name:        "Check for Media Item Changes Job",
+		Description: "Compare Media Items from the database with the Media Server cache to see if any items have been removed or changed. If a Media Item is no longer in the cache, it will be removed from the database unless it has Saved Sets or is Temp Ignored.",
+		Setting:     func() config.Config_JobSetting { return config.Current.Jobs.CheckForMediaItemChanges },
+		Default:     config.JobDefaults.CheckForMediaItemChanges,
+		Start:       StartCheckForMediaItemChangesJob,
+		RunNow:      RunCheckForMediaItemChangesJobNow,
+	},
+	{
+		Key:         JobKeyHandleTempIgnoredItems,
+		Name:        "Handle Temp Ignored Items Job",
+		Description: "Rechecks temporarily ignored media items to see if a matching set has since become available on MediUX.",
+		Setting:     func() config.Config_JobSetting { return config.Current.Jobs.HandleTempIgnoredItems },
+		Default:     config.JobDefaults.HandleTempIgnoredItems,
+		Start:       StartHandleTempIgnoredItemsJob,
+		RunNow:      RunHandleTempIgnoredItemsJobNow,
+	},
+	{
+		Key:         JobKeyRefreshMediuxUsers,
+		Name:        "Refresh Mediux Users Job",
+		Description: "Update the list of MediUX users in the backend cache, so that search results reflect the current set of users within MediUX.",
+		Setting:     func() config.Config_JobSetting { return config.Current.Jobs.RefreshMediuxUsers },
+		Default:     config.JobDefaults.RefreshMediuxUsers,
+		Start:       StartRefreshMediuxUsersJob,
+		RunNow:      RunRefreshMediuxUsersJobNow,
+	},
+	{
+		Key:         JobKeyCheckMediuxSiteLink,
+		Name:        "Check Mediux Site Link Availability Job",
+		Description: "Currently, MediUX has 2 sites. 1 for live and 1 for testing. This job checks the availability of the testing site, and falls back to the live site if the testing site is unavailable.",
+		Setting:     func() config.Config_JobSetting { return config.Current.Jobs.CheckMediuxSiteLink },
+		Default:     config.JobDefaults.CheckMediuxSiteLink,
+		Start:       StartCheckMediuxSiteLinkJob,
+		RunNow:      RunCheckMediuxSiteLinkJobNow,
+	},
+	{
+		Key:         JobKeyAutoDownload,
+		Name:        "AutoDownload Job",
+		Description: "Automatically checks your saved sets for new or updated images and downloads them.",
+		Setting:     func() config.Config_JobSetting { return config.Current.Jobs.AutoDownload },
+		Default:     config.JobDefaults.AutoDownload,
+		Start:       StartAutoDownloadJob,
+		RunNow:      RunAutoDownloadJobNow,
+	},
+	{
+		Key:         JobKeySubscriptionCheck,
+		Name:        "Subscription Check Job",
+		Description: "Checks the creators you are subscribed to for new sets, and automatically adds any matching sets for media already in your library.",
+		Setting:     func() config.Config_JobSetting { return config.Current.Jobs.SubscriptionCheck },
+		Default:     config.JobDefaults.SubscriptionCheck,
+		Start:       StartSubscriptionCheckJob,
+		RunNow:      RunSubscriptionCheckJobNow,
+	},
+}
+
+func findJobDefinition(key JobKey) (jobDefinition, bool) {
+	for _, def := range jobDefinitions {
+		if def.Key == key {
+			return def, true
+		}
+	}
+	return jobDefinition{}, false
+}
+
 var (
 	c  *cron.Cron
 	mu sync.Mutex
 
-	jobSpecs = map[cron.EntryID]string{}
-
-	// Runs Always
-	downloadQueueJobID                   cron.EntryID = 0
-	refreshMediaItemsAndCollectionsJobID cron.EntryID = 0
-	refreshMediuxUsersJobID              cron.EntryID = 0
-	checkMediuxSiteLinkJobID             cron.EntryID = 0
-	checkForMediaItemChangesJobID        cron.EntryID = 0
-	handleTempIgnoredItemsJobID          cron.EntryID = 0
-	subscriptionCheckJobID               cron.EntryID = 0
-
-	// Configurable
-	autodownloadJobID cron.EntryID = 0
+	// jobEntryIDs holds the cron.EntryID currently backing a job, if it is enabled
+	// and scheduled. A key absent from this map (or mapped to 0) means the job is
+	// not currently scheduled
+	jobEntryIDs   = map[JobKey]cron.EntryID{}
+	manualPrevRun = map[JobKey]string{}
 )
-
-var manualPrevRun = map[cron.EntryID]string{}
 
 func init() {
 	c = cron.New()
@@ -41,114 +130,107 @@ func StartJobs() {
 	}
 }
 
-type JobInfo struct {
-	ID      cron.EntryID `json:"id"`
-	Spec    string       `json:"spec"`
-	NextRun string       `json:"next_run"`
-	PrevRun string       `json:"prev_run"`
-	JobName string       `json:"job_name"`
+// StartJob (re)starts a single job by key, applying its current config
+// Used both at startup and when a config update changes
+func StartJob(key JobKey) error {
+	def, ok := findJobDefinition(key)
+	if !ok {
+		return fmt.Errorf("unknown job: %s", key)
+	}
+	return def.Start()
 }
 
+// TriggerJob runs a job immediately, regardless of whether it is currently enabled/scheduled for automatic runs
+func TriggerJob(key JobKey) error {
+	def, ok := findJobDefinition(key)
+	if !ok {
+		return fmt.Errorf("unknown job: %s", key)
+	}
+	def.RunNow()
+	return nil
+}
+
+// removeScheduledJob removes a job's cron entry and clears its tracked entry ID
+func removeScheduledJob(key JobKey) {
+	if entryID, ok := jobEntryIDs[key]; ok && entryID != 0 {
+		c.Remove(entryID)
+	}
+	delete(jobEntryIDs, key)
+}
+
+// addScheduledJob registers spec as the cron schedule for key
+func addScheduledJob(key JobKey, spec string, job func()) error {
+	entryID, err := c.AddFunc(spec, job)
+	if err != nil {
+		return err
+	}
+	jobEntryIDs[key] = entryID
+	return nil
+}
+
+// recordManualRun stamps a job as having just been run manually
+func recordManualRun(key JobKey) {
+	mu.Lock()
+	defer mu.Unlock()
+	manualPrevRun[key] = time.Now().Format("2006-01-02 15:04:05")
+}
+
+// nextRunString returns the human-readable next run time for a scheduled job
+func nextRunString(key JobKey) string {
+	mu.Lock()
+	defer mu.Unlock()
+	if c == nil {
+		return ""
+	}
+	entryID, ok := jobEntryIDs[key]
+	if !ok || entryID == 0 {
+		return ""
+	}
+	return c.Entry(entryID).Next.String()
+}
+
+type JobInfo struct {
+	ID          string `json:"id"`
+	Spec        string `json:"spec"`
+	Enabled     bool   `json:"enabled"`
+	NextRun     string `json:"next_run"`
+	PrevRun     string `json:"prev_run"`
+	JobName     string `json:"job_name"`
+	Description string `json:"description"`
+}
+
+// GetListOfJobs returns one JobInfo per known job, including jobs that are
+// currently disabled. Each job's ID is its stable JobKey, so it never collides
+// with another job's ID regardless of scheduling state.
 func GetListOfJobs() []JobInfo {
 	mu.Lock()
 	defer mu.Unlock()
 
-	var jobs []JobInfo
-	if c != nil {
-		entries := c.Entries()
-		for _, entry := range entries {
-			prevRun := entry.Prev.String()
-			if manual, ok := manualPrevRun[entry.ID]; ok {
-				prevRun = manual
-			} else if prevRun == "0001-01-01 00:00:00 +0000 UTC" {
-				prevRun = ""
-			} else {
-				prevRun = entry.Prev.Format("2006-01-02 15:04:05")
-			}
+	jobsList := make([]JobInfo, 0, len(jobDefinitions))
+	for _, def := range jobDefinitions {
+		enabled, cron := def.Setting().Resolve(def.Default)
 
-			jobInfo := JobInfo{
-				ID:      entry.ID,
-				Spec:    "",
-				NextRun: entry.Next.Format("2006-01-02 15:04:05"),
-				PrevRun: prevRun,
-				JobName: "",
-			}
-
-			// Use stored spec; cron doesn't expose it from the parsed schedule.
-			if spec, ok := jobSpecs[entry.ID]; ok {
-				jobInfo.Spec = spec
-			} else {
-				// optional fallback: at least show concrete schedule type
-				jobInfo.Spec = fmt.Sprintf("%T", entry.Schedule)
-			}
-
-			switch entry.ID {
-			case downloadQueueJobID:
-				jobInfo.JobName = "Download Queue Processing Job"
-			case autodownloadJobID:
-				jobInfo.JobName = "AutoDownload Job"
-			case refreshMediaItemsAndCollectionsJobID:
-				jobInfo.JobName = "Refresh Media Items and Collections Job"
-			case refreshMediuxUsersJobID:
-				jobInfo.JobName = "Refresh Mediux Users Job"
-			case checkMediuxSiteLinkJobID:
-				jobInfo.JobName = "Check Mediux Site Link Availability Job"
-			case checkForMediaItemChangesJobID:
-				jobInfo.JobName = "Check for Media Item Changes Job"
-			case handleTempIgnoredItemsJobID:
-				jobInfo.JobName = "Handle Temp Ignored Items Job"
-			case subscriptionCheckJobID:
-				jobInfo.JobName = "Subscription Check Job"
-			default:
-				jobInfo.JobName = "Unknown Job"
-			}
-			jobs = append(jobs, jobInfo)
+		info := JobInfo{
+			ID:          string(def.Key),
+			JobName:     def.Name,
+			Description: def.Description,
+			Enabled:     enabled,
+			Spec:        cron,
 		}
-	}
-	return jobs
-}
 
-func TriggerJob(jobName string, jobID string) error {
-	mu.Lock()
-	defer mu.Unlock()
-
-	var entryID cron.EntryID
-	switch jobName {
-	case "Download Queue Processing Job":
-		entryID = downloadQueueJobID
-	case "AutoDownload Job":
-		entryID = autodownloadJobID
-	case "Refresh Media Items and Collections Job":
-		entryID = refreshMediaItemsAndCollectionsJobID
-	case "Refresh Mediux Users Job":
-		entryID = refreshMediuxUsersJobID
-	case "Check Mediux Site Link Availability Job":
-		entryID = checkMediuxSiteLinkJobID
-	case "Check for Media Item Changes Job":
-		entryID = checkForMediaItemChangesJobID
-	case "Handle Temp Ignored Items Job":
-		entryID = handleTempIgnoredItemsJobID
-	case "Subscription Check Job":
-		entryID = subscriptionCheckJobID
-	default:
-		return fmt.Errorf("unknown job name: %s", jobName)
-	}
-
-	if entryID == 0 {
-		return fmt.Errorf("job not found or not scheduled: %s", jobName)
-	}
-
-	entry := c.Entry(entryID)
-	if entry.ID == 0 {
-		return fmt.Errorf("job entry not found for ID: %d", entryID)
-	}
-
-	go func() {
-		if entry.Job != nil {
-			manualPrevRun[entry.ID] = time.Now().Format("2006-01-02 15:04:05")
-			entry.Job.Run()
+		if entryID, ok := jobEntryIDs[def.Key]; ok && entryID != 0 && c != nil {
+			entry := c.Entry(entryID)
+			if entry.ID != 0 {
+				info.NextRun = entry.Next.Format("2006-01-02 15:04:05")
+				if manual, ok := manualPrevRun[def.Key]; ok {
+					info.PrevRun = manual
+				} else if !entry.Prev.IsZero() {
+					info.PrevRun = entry.Prev.Format("2006-01-02 15:04:05")
+				}
+			}
 		}
-	}()
 
-	return nil
+		jobsList = append(jobsList, info)
+	}
+	return jobsList
 }

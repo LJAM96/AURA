@@ -32,6 +32,22 @@ func CheckFileExists(filePath string) (exists bool) {
 	return !os.IsNotExist(err)
 }
 
+// GetExtensionFromContentType maps an image Content-Type/MIME type to a file
+// extension (including the leading dot). Defaults to ".jpg" for unknown or
+// empty content types, since JPEG is the most common MediUX image format.
+func GetExtensionFromContentType(contentType string) string {
+	switch contentType {
+	case "image/png":
+		return ".png"
+	case "image/webp":
+		return ".webp"
+	case "image/gif":
+		return ".gif"
+	default:
+		return ".jpg"
+	}
+}
+
 func ClearAllFilesFromFolder(ctx context.Context, folderPath string) (clearCount int, Err logging.LogErrorInfo) {
 	ctx, logAction := logging.AddSubActionToContext(ctx, "Clearing files from folder", logging.LevelInfo)
 	defer logAction.Complete()

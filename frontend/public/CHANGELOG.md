@@ -1,3 +1,95 @@
+## [0.9.108] - 2026-09-17
+
+### Fixed
+
+- Fixed the frontend server only listening on the IP address of one attached Docker network instead of all interfaces.
+
+---
+
+## [0.9.107] - 2026-09-11
+
+### Added
+
+- Added new functionality to allow users to schedule Jobs at any interval they want using cron expressions. (Thanks to [mattsigil](https://github.com/mattsigal) for the PR!)
+
+---
+
+## [0.9.106] - 2026-08-28
+
+### Fixed
+
+- [#147](https://github.com/mediux-team/AURA/issues/147) Fixed issue where MediUX avatar images that did not exist for a user would return a 200 response with no image data. Now, if the avatar image does not exist, it will return a 404 response with an error message in the response body.
+
+---
+
+## [0.9.105] - 2026-08-26
+
+### Breaking
+
+- The new Download Queue system will no longer look into the download-queue folder for items. If you have any items in the download-queue folder, please delete them and re-add them to the new Download Queue system.
+
+### Added
+
+- Updated Download Queue page to work with new queueing system. This includes history for downloads with warnings or errors. As a part of this update, the download queue is now won't rerun items in the queue if they take longer than 1 minute to complete as its not cron based.
+
+---
+
+## [0.9.104] - 2026-08-21
+
+### Added
+
+- Added new Bulk Edit options for Enabling and Disabling Auto-Download for multiple Saved Sets at once.
+- Organized the Bulk Edit options into a groups for better user experience.
+- Added new download option for Media Items that are present in multiple libraries. This will allow you to download images for the same Media Item in multiple libraries at once instead of having to download them separately for each library.
+
+### Fixed
+
+- Fixed padding with Table View on Saved Sets page.
+- Fixed styling with Table View on Saved Sets page.
+- Fixed issue where Media Items with a Edition tag would keep throwing "Check For Media Item Changes Job" notifications.
+
+---
+
+## [0.9.103] - 2026-08-14
+
+### Fixed
+
+- Fixed issue where MediUX downloads for image types other than jpeg were not being saved correctly. This was due to a bug in the backend where the file extension was not being set correctly for non-jpeg image types. This has been fixed by ensuring that the correct file extension is used when saving images from MediUX.
+
+---
+
+## [0.9.102] - 2026-08-13
+
+### Breaking
+
+- Since this is an overhaul of how authentication is handled, there are some breaking changes to the API routes. Please review the swagger docs for the new API routes and authentication methods. The new authentication methods include OIDC (Single Sign-On) and API Key authentication. Please update your configuration accordingly.
+
+### Added
+
+- Added support for multiple Editions of the same Movie/Show in Plex (e.g. Color vs. Black & White) — each Edition is now tracked, saved, and displayed separately instead of overwriting the other.
+- Added support for logging in via OIDC (Single Sign-On) in addition to the existing password login, with optional email/domain allowlisting.
+- Added a global API key for programmatic access.
+
+### Fixed
+
+- Fixed issue where Changelog would appear on every page visit when cookies were cleared. Now, the Changelog will only appear if a previous version is detected in the cookies and it is different from the current version. This will prevent the Changelog from appearing on every page visit when cookies are cleared.
+
+---
+
+## [0.9.101] - 2026-08-08
+
+### Added
+
+- Added new Authorization header for Jellyfin media servers. This is to fix an issue where some Jellyfin servers were not accepting the X-Emby-Token header for authentication. Now, if the media server type is set to Jellyfin, it will use the new Authorization header as well. (Thanks to [degradedcode](https://github.com/degradedcode) for the PR!)
+- Added new Accordion component to the Changelog page to allow for better organization of the changelog entries. This will allow users to expand/collapse each version's changes for better readability.
+
+### Fixed
+
+- [#142](https://github.com/mediux-team/AURA/issues/142) Fixed issue where user page sometimes crashes when viewing or filtering Movie Sets.
+- [#138](https://github.com/mediux-team/AURA/issues/138) Fixed issue where the navigation dropdown menu would sometimes only show "Logs" and "Jobs" after login or logout, hiding "Saved Sets", "Collections", "Download Queue", "Settings", and "View Density" until the page was refreshed multiple times.
+
+---
+
 ## [0.9.100] - 2026-04-01
 
 ### Fixed
@@ -744,7 +836,7 @@
 
 ---
 
-## [0.9.42] - 2025-10-31
+## [0.9.42b] - 2025-10-31
 
 ### Added
 

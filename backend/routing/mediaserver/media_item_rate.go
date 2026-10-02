@@ -23,7 +23,8 @@ type RateMediaItem_Response struct {
 // @Produce      json
 // @Param        rating_key   query     string  true  "The rating key of the media item to rate"
 // @Param        rating       query     string  true  "The user rating for the media item (0-5)"
-// @Security 	 BearerAuth
+// @Security     SessionCookie
+// @Security     ApiKeyAuth
 // @Failure      401  {object}  httpx.UnauthorizedResponse "Unauthorized (only when Auth.Enabled=true)"
 // @Success      200  {object}  httpx.JSONResponse{data=RateMediaItem_Response}
 // @Failure      500  {object}  httpx.JSONResponse "Internal Server Error"

@@ -10,4 +10,5 @@ export interface AppStatusResponse {
   app_fully_loaded: boolean;
   app_version: string;
   app_loading_step: string;
+  api_key_configured: boolean;
 }

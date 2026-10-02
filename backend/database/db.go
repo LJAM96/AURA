@@ -9,7 +9,7 @@ import (
 	"fmt"
 )
 
-const LATEST_DB_VERSION = 8
+const LATEST_DB_VERSION = 9
 
 var Client DB
 
@@ -56,7 +56,7 @@ type DB interface {
 	UpsertSavedItem(ctx context.Context, newItem models.DBSavedItem) (Err logging.LogErrorInfo)
 
 	// Check Media Item Exists
-	CheckIfMediaItemExists(ctx context.Context, TMDB_ID, libraryTitle string) (ignored bool, ignoredMode string, sets []models.DBSavedSet, logErr logging.LogErrorInfo)
+	CheckIfMediaItemExists(ctx context.Context, TMDB_ID, libraryTitle, edition string) (ignored bool, ignoredMode string, sets []models.DBSavedSet, logErr logging.LogErrorInfo)
 
 	// Get All Media Items
 	GetAllMediaItems(ctx context.Context) (items []models.MediaItem, logErr logging.LogErrorInfo)
@@ -68,7 +68,7 @@ type DB interface {
 	UpdateMediaItem(ctx context.Context, updatedItem models.MediaItem) (Err logging.LogErrorInfo)
 
 	// Delete Media Item and Ignored Item entries for a given TMDB ID and Library Title
-	DeleteMediaItemAndIgnoredStatus(ctx context.Context, TMDB_ID, libraryTitle string) (Err logging.LogErrorInfo)
+	DeleteMediaItemAndIgnoredStatus(ctx context.Context, TMDB_ID, libraryTitle, edition string) (Err logging.LogErrorInfo)
 
 	// Get All Saved Sets
 	GetAllSavedSets(ctx context.Context, dbFilter models.DBFilter) (out PagedSavedItems, logErr logging.LogErrorInfo)
@@ -80,22 +80,55 @@ type DB interface {
 	//GetCountSavedSets(ctx context.Context) (count int, logErr logging.LogErrorInfo)
 
 	// Delete Poster Set (and associated images) by ID
-	DeletePosterSetForMediaItem(ctx context.Context, tmdbID, libraryTitle, setID string) (Err logging.LogErrorInfo)
+	DeletePosterSetForMediaItem(ctx context.Context, tmdbID, libraryTitle, edition, setID string) (Err logging.LogErrorInfo)
 
 	// Delete All Poster Sets for Media Item
-	DeleteAllPosterSetsForMediaItem(ctx context.Context, tmdbID, libraryTitle string) (Err logging.LogErrorInfo)
+	DeleteAllPosterSetsForMediaItem(ctx context.Context, tmdbID, libraryTitle, edition string) (Err logging.LogErrorInfo)
 
 	// Ignore Media Item
-	IgnoreMediaItem(ctx context.Context, tmdbID, libraryTitle, mode, currentSets string) (Err logging.LogErrorInfo)
+	IgnoreMediaItem(ctx context.Context, tmdbID, libraryTitle, edition, mode, currentSets string) (Err logging.LogErrorInfo)
 
 	// Stop Ignoring Media Item
-	StopIgnoringMediaItem(ctx context.Context, TMDB_ID, libraryTitle string) (Err logging.LogErrorInfo)
+	StopIgnoringMediaItem(ctx context.Context, TMDB_ID, libraryTitle, edition string) (Err logging.LogErrorInfo)
 
 	// Get Temp Ignored Items
 	GetTempIgnoredItems(ctx context.Context) (items []models.MediaItem, Err logging.LogErrorInfo)
 
 	// Update Media Item on_server flag
-	UpdateMediaItemOnServer(ctx context.Context, tmdbID string, libraryTitle string, onServer bool) (logErr logging.LogErrorInfo)
+	UpdateMediaItemOnServer(ctx context.Context, tmdbID string, libraryTitle string, edition string, onServer bool) (logErr logging.LogErrorInfo)
+
+	// Reconcile a Media Item whose Edition changed
+	ReconcileMediaItemEdition(ctx context.Context, tmdbID, libraryTitle, oldEdition string, updatedItem models.MediaItem) (Err logging.LogErrorInfo)
+
+	// Enqueue a new Download Queue Job
+	EnqueueDownloadQueueJob(ctx context.Context, item models.DBSavedItem) (jobID int64, Err logging.LogErrorInfo)
+
+	// Atomically claim the next pending Download Queue Job, if any
+	ClaimNextDownloadQueueJob(ctx context.Context, workerID string) (job DownloadQueueJob, found bool, Err logging.LogErrorInfo)
+
+	// Mark a Download Queue Job as finished with its result
+	FinishDownloadQueueJob(ctx context.Context, jobID int64, status string, message string, errs, warnings []string) (Err logging.LogErrorInfo)
+
+	// Get All Download Queue Jobs
+	GetAllDownloadQueueJobs(ctx context.Context) (jobs []DownloadQueueJob, Err logging.LogErrorInfo)
+
+	// Delete a single Download Queue Job by ID
+	DeleteDownloadQueueJob(ctx context.Context, jobID int64) (Err logging.LogErrorInfo)
+
+	// Delete all Download Queue Jobs (except those currently processing)
+	DeleteAllDownloadQueueJobs(ctx context.Context) (Err logging.LogErrorInfo)
+
+	// Insert a Download History entry, applying retention cleanup
+	InsertDownloadHistoryEntry(ctx context.Context, entry DownloadHistoryEntry) (Err logging.LogErrorInfo)
+
+	// Get Download History entries
+	GetDownloadHistory(ctx context.Context, limit, offset int) (entries []DownloadHistoryEntry, total int, Err logging.LogErrorInfo)
+
+	// Delete a single Download History entry by ID
+	DeleteDownloadHistoryEntry(ctx context.Context, id int64) (Err logging.LogErrorInfo)
+
+	// Delete all Download History entries
+	DeleteAllDownloadHistory(ctx context.Context) (Err logging.LogErrorInfo)
 
 	// Create/Update User Subscription
 	CreateSubscription(ctx context.Context, sub models.UserSubscription) (id int, logErr logging.LogErrorInfo)
@@ -232,11 +265,11 @@ func UpsertSavedItem(ctx context.Context, newItem models.DBSavedItem) (Err loggi
 	return Client.UpsertSavedItem(ctx, newItem)
 }
 
-func CheckIfMediaItemExists(ctx context.Context, TMDB_ID, libraryTitle string) (ignored bool, ignoreMode string, sets []models.DBSavedSet, logErr logging.LogErrorInfo) {
+func CheckIfMediaItemExists(ctx context.Context, TMDB_ID, libraryTitle, edition string) (ignored bool, ignoreMode string, sets []models.DBSavedSet, logErr logging.LogErrorInfo) {
 	if Client == nil {
 		return false, "", []models.DBSavedSet{}, logging.Error_DBClientNotInitialized()
 	}
-	return Client.CheckIfMediaItemExists(ctx, TMDB_ID, libraryTitle)
+	return Client.CheckIfMediaItemExists(ctx, TMDB_ID, libraryTitle, edition)
 }
 
 func GetAllMediaItems(ctx context.Context) (items []models.MediaItem, logErr logging.LogErrorInfo) {
@@ -260,11 +293,11 @@ func UpdateMediaItem(ctx context.Context, updatedItem models.MediaItem) (Err log
 	return Client.UpdateMediaItem(ctx, updatedItem)
 }
 
-func DeleteMediaItemAndIgnoredStatus(ctx context.Context, TMDB_ID, libraryTitle string) (Err logging.LogErrorInfo) {
+func DeleteMediaItemAndIgnoredStatus(ctx context.Context, TMDB_ID, libraryTitle, edition string) (Err logging.LogErrorInfo) {
 	if Client == nil {
 		return logging.Error_DBClientNotInitialized()
 	}
-	return Client.DeleteMediaItemAndIgnoredStatus(ctx, TMDB_ID, libraryTitle)
+	return Client.DeleteMediaItemAndIgnoredStatus(ctx, TMDB_ID, libraryTitle, edition)
 }
 
 func GetAllSavedSets(ctx context.Context, dbFilter models.DBFilter) (out PagedSavedItems, logErr logging.LogErrorInfo) {
@@ -288,32 +321,32 @@ func GetAllUniqueUsers(ctx context.Context) (users []string, logErr logging.LogE
 // 	return Client.GetCountSavedSets(ctx)
 // }
 
-func DeletePosterSetForMediaItem(ctx context.Context, tmdbID, libraryTitle, setID string) (Err logging.LogErrorInfo) {
+func DeletePosterSetForMediaItem(ctx context.Context, tmdbID, libraryTitle, edition, setID string) (Err logging.LogErrorInfo) {
 	if Client == nil {
 		return logging.Error_DBClientNotInitialized()
 	}
-	return Client.DeletePosterSetForMediaItem(ctx, tmdbID, libraryTitle, setID)
+	return Client.DeletePosterSetForMediaItem(ctx, tmdbID, libraryTitle, edition, setID)
 }
 
-func DeleteAllPosterSetsForMediaItem(ctx context.Context, tmdbID, libraryTitle string) (Err logging.LogErrorInfo) {
+func DeleteAllPosterSetsForMediaItem(ctx context.Context, tmdbID, libraryTitle, edition string) (Err logging.LogErrorInfo) {
 	if Client == nil {
 		return logging.Error_DBClientNotInitialized()
 	}
-	return Client.DeleteAllPosterSetsForMediaItem(ctx, tmdbID, libraryTitle)
+	return Client.DeleteAllPosterSetsForMediaItem(ctx, tmdbID, libraryTitle, edition)
 }
 
-func IgnoreMediaItem(ctx context.Context, tmdbID, libraryTitle, mode, currentSets string) (Err logging.LogErrorInfo) {
+func IgnoreMediaItem(ctx context.Context, tmdbID, libraryTitle, edition, mode, currentSets string) (Err logging.LogErrorInfo) {
 	if Client == nil {
 		return logging.Error_DBClientNotInitialized()
 	}
-	return Client.IgnoreMediaItem(ctx, tmdbID, libraryTitle, mode, currentSets)
+	return Client.IgnoreMediaItem(ctx, tmdbID, libraryTitle, edition, mode, currentSets)
 }
 
-func StopIgnoringMediaItem(ctx context.Context, TMDB_ID, libraryTitle string) (Err logging.LogErrorInfo) {
+func StopIgnoringMediaItem(ctx context.Context, TMDB_ID, libraryTitle, edition string) (Err logging.LogErrorInfo) {
 	if Client == nil {
 		return logging.Error_DBClientNotInitialized()
 	}
-	return Client.StopIgnoringMediaItem(ctx, TMDB_ID, libraryTitle)
+	return Client.StopIgnoringMediaItem(ctx, TMDB_ID, libraryTitle, edition)
 }
 
 func GetTempIgnoredItems(ctx context.Context) (items []models.MediaItem, Err logging.LogErrorInfo) {
@@ -323,11 +356,88 @@ func GetTempIgnoredItems(ctx context.Context) (items []models.MediaItem, Err log
 	return Client.GetTempIgnoredItems(ctx)
 }
 
-func UpdateMediaItemOnServer(ctx context.Context, tmdbID string, libraryTitle string, onServer bool) (logErr logging.LogErrorInfo) {
+func UpdateMediaItemOnServer(ctx context.Context, tmdbID string, libraryTitle string, edition string, onServer bool) (logErr logging.LogErrorInfo) {
 	if Client == nil {
 		return logging.Error_DBClientNotInitialized()
 	}
-	return Client.UpdateMediaItemOnServer(ctx, tmdbID, libraryTitle, onServer)
+	return Client.UpdateMediaItemOnServer(ctx, tmdbID, libraryTitle, edition, onServer)
+}
+
+func ReconcileMediaItemEdition(ctx context.Context, tmdbID, libraryTitle, oldEdition string, updatedItem models.MediaItem) (Err logging.LogErrorInfo) {
+	if Client == nil {
+		return logging.Error_DBClientNotInitialized()
+	}
+	return Client.ReconcileMediaItemEdition(ctx, tmdbID, libraryTitle, oldEdition, updatedItem)
+}
+
+func EnqueueDownloadQueueJob(ctx context.Context, item models.DBSavedItem) (jobID int64, Err logging.LogErrorInfo) {
+	if Client == nil {
+		return 0, logging.Error_DBClientNotInitialized()
+	}
+	return Client.EnqueueDownloadQueueJob(ctx, item)
+}
+
+func ClaimNextDownloadQueueJob(ctx context.Context, workerID string) (job DownloadQueueJob, found bool, Err logging.LogErrorInfo) {
+	if Client == nil {
+		return DownloadQueueJob{}, false, logging.Error_DBClientNotInitialized()
+	}
+	return Client.ClaimNextDownloadQueueJob(ctx, workerID)
+}
+
+func FinishDownloadQueueJob(ctx context.Context, jobID int64, status string, message string, errs, warnings []string) (Err logging.LogErrorInfo) {
+	if Client == nil {
+		return logging.Error_DBClientNotInitialized()
+	}
+	return Client.FinishDownloadQueueJob(ctx, jobID, status, message, errs, warnings)
+}
+
+func GetAllDownloadQueueJobs(ctx context.Context) (jobs []DownloadQueueJob, Err logging.LogErrorInfo) {
+	if Client == nil {
+		return []DownloadQueueJob{}, logging.Error_DBClientNotInitialized()
+	}
+	return Client.GetAllDownloadQueueJobs(ctx)
+}
+
+func DeleteDownloadQueueJob(ctx context.Context, jobID int64) (Err logging.LogErrorInfo) {
+	if Client == nil {
+		return logging.Error_DBClientNotInitialized()
+	}
+	return Client.DeleteDownloadQueueJob(ctx, jobID)
+}
+
+func DeleteAllDownloadQueueJobs(ctx context.Context) (Err logging.LogErrorInfo) {
+	if Client == nil {
+		return logging.Error_DBClientNotInitialized()
+	}
+	return Client.DeleteAllDownloadQueueJobs(ctx)
+}
+
+func InsertDownloadHistoryEntry(ctx context.Context, entry DownloadHistoryEntry) (Err logging.LogErrorInfo) {
+	if Client == nil {
+		return logging.Error_DBClientNotInitialized()
+	}
+	return Client.InsertDownloadHistoryEntry(ctx, entry)
+}
+
+func GetDownloadHistory(ctx context.Context, limit, offset int) (entries []DownloadHistoryEntry, total int, Err logging.LogErrorInfo) {
+	if Client == nil {
+		return []DownloadHistoryEntry{}, 0, logging.Error_DBClientNotInitialized()
+	}
+	return Client.GetDownloadHistory(ctx, limit, offset)
+}
+
+func DeleteDownloadHistoryEntry(ctx context.Context, id int64) (Err logging.LogErrorInfo) {
+	if Client == nil {
+		return logging.Error_DBClientNotInitialized()
+	}
+	return Client.DeleteDownloadHistoryEntry(ctx, id)
+}
+
+func DeleteAllDownloadHistory(ctx context.Context) (Err logging.LogErrorInfo) {
+	if Client == nil {
+		return logging.Error_DBClientNotInitialized()
+	}
+	return Client.DeleteAllDownloadHistory(ctx)
 }
 
 func CreateSubscription(ctx context.Context, sub models.UserSubscription) (id int, logErr logging.LogErrorInfo) {

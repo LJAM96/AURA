@@ -1,31 +1,19 @@
-import axios, { AxiosRequestHeaders } from "axios";
+import axios from "axios";
 
 const apiClient = axios.create({
   baseURL: "/api",
   timeout: 3000000,
+  withCredentials: true, // send/receive the aura_session HttpOnly cookie
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-apiClient.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("aura-auth-token");
-    if (token) {
-      config.headers = config.headers || {};
-      (config.headers as AxiosRequestHeaders).Authorization = `Bearer ${token}`;
-    }
-  }
-  return config;
-});
-
-// Optional: auto redirect on 401
+// Auto redirect on 401 - session cookie missing/expired
 apiClient.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err?.response?.status === 401 && typeof window !== "undefined") {
-      // Clear token and go to login
-      localStorage.removeItem("aura-auth-token");
       if (!window.location.pathname.startsWith("/login")) {
         window.location.href = "/login";
       }

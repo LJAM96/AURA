@@ -43,7 +43,7 @@ type movieCollectionSetsByTMDBID_ImageCollection struct {
 	Collection BaseSetInfo `json:"collection_set"`
 }
 
-func GetMovieItemCollectionSets(ctx context.Context, tmdbID string, itemLibraryTitle string, setItems *map[string]models.IncludedItem) (sets []models.SetRef, Err logging.LogErrorInfo) {
+func GetMovieItemCollectionSets(ctx context.Context, tmdbID string, itemLibraryTitle string, edition string, setItems *map[string]models.IncludedItem) (sets []models.SetRef, Err logging.LogErrorInfo) {
 	ctx, logAction := logging.AddSubActionToContext(ctx, "Get Movie Item Collection Sets", logging.LevelInfo)
 	defer logAction.Complete()
 
@@ -95,8 +95,16 @@ func GetMovieItemCollectionSets(ctx context.Context, tmdbID string, itemLibraryT
 		includedItem.MediuxInfo = baseItem
 		(*setItems)[mediuxMovie.ID] = includedItem
 
-		// Find the Media Item info from the cache
-		mediaItem, found := cache.LibraryStore.GetMediaItemFromSectionByTMDBID(itemLibraryTitle, mediuxMovie.ID)
+		// Find the Media Item info from the cache. The primary item being browsed
+		// (matching tmdbID) resolves to the exact edition; other collection
+		// members are distinct movies, so we fall back to an arbitrary match.
+		var mediaItem *models.MediaItem
+		var found bool
+		if mediuxMovie.ID == tmdbID {
+			mediaItem, found = cache.LibraryStore.GetMediaItemFromSectionByTMDBIDAndEdition(itemLibraryTitle, mediuxMovie.ID, edition)
+		} else {
+			mediaItem, found = cache.LibraryStore.GetMediaItemFromSectionByTMDBID(itemLibraryTitle, mediuxMovie.ID)
+		}
 		if found {
 			includedItem := (*setItems)[mediuxMovie.ID]
 			includedItem.MediaItem = *mediaItem

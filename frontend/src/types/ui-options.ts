@@ -65,12 +65,7 @@ export const USER_PAGE_FILTER_IN_DB_OPTIONS: {
 
 // Ignored Filter Options
 export type TYPE_FILTER_IGNORED_OPTIONS =
-  | ""
-  | "ignored"
-  | "always"
-  | "until-set-available"
-  | "until-new-set-available"
-  | "not_ignored";
+  "" | "ignored" | "always" | "until-set-available" | "until-new-set-available" | "not_ignored";
 export const FILTER_IGNORED_OPTIONS: {
   value: TYPE_FILTER_IGNORED_OPTIONS;
   label: string;
@@ -84,11 +79,7 @@ export const FILTER_IGNORED_OPTIONS: {
 
 // Download Default Type Options
 export type TYPE_DOWNLOAD_IMAGE_TYPE_OPTIONS =
-  | "poster"
-  | "backdrop"
-  | "season_poster"
-  | "special_season_poster"
-  | "titlecard";
+  "poster" | "backdrop" | "season_poster" | "special_season_poster" | "titlecard";
 export const DOWNLOAD_IMAGE_TYPE_OPTIONS: {
   value: TYPE_DOWNLOAD_IMAGE_TYPE_OPTIONS;
   label: string;

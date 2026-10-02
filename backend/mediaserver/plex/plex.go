@@ -79,6 +79,7 @@ type PlexLibraryItemsMetadata struct {
 	Genres                []PlexTagFieldInt `json:"Genre,omitempty"`
 	Countries             []PlexTagFieldInt `json:"Country,omitempty"`
 	Roles                 []PlexRoleField   `json:"Role,omitempty"`
+	Edition               string            `json:"editionTitle,omitempty"`
 
 	// Series Specific
 	Index           int `json:"index,omitempty"`

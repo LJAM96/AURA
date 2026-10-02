@@ -15,7 +15,8 @@ export interface IgnoreItem_Response {
 
 export const StopIgnoringItemInDB = async (
   tmdbID: string,
-  libraryTitle: string
+  libraryTitle: string,
+  edition: string = ""
 ): Promise<APIResponse<IgnoreItem_Response>> => {
   log(
     "INFO",
@@ -27,6 +28,7 @@ export const StopIgnoringItemInDB = async (
     const params = {
       tmdb_id: tmdbID,
       library_title: libraryTitle,
+      edition,
     };
     const response = await apiClient.patch<APIResponse<IgnoreItem_Response>>(`/db/ignore/stop`, null, {
       params: params,
@@ -43,7 +45,7 @@ export const StopIgnoringItemInDB = async (
       );
     }
     const { updateIgnoreStatus } = useLibrarySectionsStore.getState();
-    updateIgnoreStatus(tmdbID, libraryTitle, false, "");
+    updateIgnoreStatus(tmdbID, libraryTitle, false, "", edition);
     return response.data;
   } catch (error) {
     log(
@@ -61,7 +63,8 @@ export const IgnoreItemInDB = async (
   tmdbID: string,
   libraryTitle: string,
   ignoreMode: string,
-  currentSetsAvailable: string[]
+  currentSetsAvailable: string[],
+  edition: string = ""
 ): Promise<APIResponse<IgnoreItem_Response>> => {
   log(
     "INFO",
@@ -73,6 +76,7 @@ export const IgnoreItemInDB = async (
     const params = {
       tmdb_id: tmdbID,
       library_title: libraryTitle,
+      edition,
       mode: ignoreMode,
       current_sets: currentSetsAvailable.join(",") || "",
     };
@@ -89,7 +93,7 @@ export const IgnoreItemInDB = async (
       );
     }
     const { updateIgnoreStatus } = useLibrarySectionsStore.getState();
-    updateIgnoreStatus(tmdbID, libraryTitle, true, ignoreMode);
+    updateIgnoreStatus(tmdbID, libraryTitle, true, ignoreMode, edition);
     return response.data;
   } catch (error) {
     log(

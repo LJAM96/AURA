@@ -5,7 +5,6 @@ import (
 	"aura/logging"
 	"aura/utils/httpx"
 	"net/http"
-	"time"
 
 	"github.com/alexedwards/argon2id"
 )
@@ -15,12 +14,12 @@ type loginRequest struct {
 }
 
 type loginResponse struct {
-	Token string `json:"token"`
+	Authenticated bool `json:"authenticated"`
 }
 
 // Login godoc
 // @Summary      Auth Login
-// @Description  Authenticate user and return a JWT token
+// @Description  Authenticate with the admin password and start a browser session. On success, an HttpOnly session cookie is set - the response body does not contain a token. Intended for browser/UI use only; for programmatic access use an API key (see the X-Api-Key header on other endpoints).
 // @Tags         Auth
 // @Accept       json
 // @Produce      json
@@ -63,25 +62,16 @@ func AttemptLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build claims
-	claims := map[string]any{
-		"sub": "aura",
-		"iat": time.Now().Unix(),
-		"exp": time.Now().Add(24 * time.Hour).Unix(),
-	}
-
-	// Use jwtauth to create token (consistent with verifier)
-	_, signedToken, err := TokenAuth.Encode(claims)
-	if err != nil {
-		logAction.SetError("Failed to generate token", "An error occurred while generating the JWT token", map[string]any{
+	if err := IssueSessionCookie(w, r); err != nil {
+		logAction.SetError("Failed to start session", "An error occurred while generating the session token", map[string]any{
 			"error": err,
 		})
 		httpx.SendResponse(w, ld, response)
 		return
 	}
 
-	logAction.AppendResult("token_generated", true)
+	logAction.AppendResult("session_issued", true)
 
-	response.Token = signedToken
+	response.Authenticated = true
 	httpx.SendResponse(w, ld, response)
 }

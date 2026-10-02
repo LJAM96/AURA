@@ -16,7 +16,8 @@ type templateVariablesResponse struct {
 // @Description  Get all available notification template variables grouped by category and by template type.
 // @Tags         Config
 // @Produce      json
-// @Security     BearerAuth
+// @Security     SessionCookie
+// @Security     ApiKeyAuth
 // @Failure      401  {object}  httpx.UnauthorizedResponse "Unauthorized (only when Auth.Enabled=true)"
 // @Success      200  {object}  httpx.JSONResponse{data=routes_config.templateVariablesResponse}
 // @Router       /api/config/template-variables [get]

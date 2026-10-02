@@ -28,11 +28,34 @@ func CheckForMediaItemChanges(ctx context.Context) (Err logging.LogErrorInfo) {
 	// If a DB MediaItem is not found in the Cache AND it has Saved Sets, this is an item we want to keep in the DB but we should send a notification about it so the user can investigate
 	// If a DB MediaItem is not found in the Cache AND it is Temp Ignored, this is an item we can remove from the DB
 	for _, dbItem := range dbMediaItems {
-		cachedItem, found := cache.LibraryStore.GetMediaItemFromSectionByTMDBID(dbItem.LibraryTitle, dbItem.TMDB_ID)
+		cachedItem, found := cache.LibraryStore.GetMediaItemFromSectionByTMDBIDAndEdition(dbItem.LibraryTitle, dbItem.TMDB_ID, dbItem.Edition)
 		if !found {
+			// The exact (tmdb_id, edition) pair wasn't found
+			// Check if its there under a different Edition
+			// If so, this is an edition change, not a removal, reconcile it.
+			if editionChangedItem, editionChangedFound := cache.LibraryStore.GetMediaItemFromSectionByTMDBID(dbItem.LibraryTitle, dbItem.TMDB_ID); editionChangedFound && editionChangedItem.Edition != dbItem.Edition {
+				logging.LOGGER.Info().Timestamp().Str("tmdb_id", dbItem.TMDB_ID).Str("library_title", dbItem.LibraryTitle).
+					Str("old_edition", dbItem.Edition).Str("new_edition", editionChangedItem.Edition).
+					Msg("MediaItem Edition changed on media server - reconciling instead of treating as removed")
+
+				reconcileErr := database.ReconcileMediaItemEdition(ctx, dbItem.TMDB_ID, dbItem.LibraryTitle, dbItem.Edition, *editionChangedItem)
+				if reconcileErr.Message != "" {
+					logAction.AppendWarning("reconcile_edition_error", reconcileErr.Message)
+				} else {
+					logAction.AppendResult("reconciled_editions", map[string]any{
+						"tmdb_id":       dbItem.TMDB_ID,
+						"library_title": dbItem.LibraryTitle,
+						"old_edition":   dbItem.Edition,
+						"new_edition":   editionChangedItem.Edition,
+					})
+				}
+				continue
+			}
+
 			mediaItem := models.MediaItem{
 				TMDB_ID:      dbItem.TMDB_ID,
 				LibraryTitle: dbItem.LibraryTitle,
+				Edition:      dbItem.Edition,
 				Title:        dbItem.Title,
 				Year:         dbItem.Year,
 			}
@@ -45,7 +68,7 @@ func CheckForMediaItemChanges(ctx context.Context) (Err logging.LogErrorInfo) {
 				reason = "This item was not in any Saved Sets and does not have a status of Ignored."
 				action = "This item will be removed from the database since it is not in the media server cache and does not have any Saved Sets or Ignored status"
 				moreInfo = "This may indicate that the media item was removed from the media server or there is an issue with the media server cache. Please verify if this media item still exists in the media server. If it does exist and you want to keep it in the database, please add it to a Saved Set or set it to be ignored temporarily."
-				database.DeleteMediaItemAndIgnoredStatus(ctx, dbItem.TMDB_ID, dbItem.LibraryTitle)
+				database.DeleteMediaItemAndIgnoredStatus(ctx, dbItem.TMDB_ID, dbItem.LibraryTitle, dbItem.Edition)
 			} else if dbItem.HasSavedSet {
 				// If the item is not found in the cache AND it has Saved Sets
 				logging.LOGGER.Warn().Timestamp().Str("tmdb_id", dbItem.TMDB_ID).Str("library_title", dbItem.LibraryTitle).Msg("MediaItem not found in cache but has Saved Sets")
@@ -58,12 +81,12 @@ func CheckForMediaItemChanges(ctx context.Context) (Err logging.LogErrorInfo) {
 				reason = "This item was not in the cache but is set to be ignored temporarily."
 				action = "This item will be removed from the database since it is set to be ignored temporarily"
 				moreInfo = "This may indicate that the Media Item was removed or there is an issue with the media server. Please double check if this item exists. If it does exist and you want to keep it as ignored temporarily, please ignore it again."
-				database.DeleteMediaItemAndIgnoredStatus(ctx, dbItem.TMDB_ID, dbItem.LibraryTitle)
+				database.DeleteMediaItemAndIgnoredStatus(ctx, dbItem.TMDB_ID, dbItem.LibraryTitle, dbItem.Edition)
 			}
 			logging.LOGGER.Trace().Timestamp().Str("tmdb_id", dbItem.TMDB_ID).Str("library_title", dbItem.LibraryTitle).Str("title", dbItem.Title).Msg("Checking Media Item for changes")
 
 			// Update the Media Item on Server in the DB
-			updateErr := database.UpdateMediaItemOnServer(ctx, dbItem.TMDB_ID, dbItem.LibraryTitle, false)
+			updateErr := database.UpdateMediaItemOnServer(ctx, dbItem.TMDB_ID, dbItem.LibraryTitle, dbItem.Edition, false)
 			if updateErr.Message != "" {
 				logAction.AppendWarning("update_on_server_error", updateErr.Message)
 			}

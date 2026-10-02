@@ -1,9 +1,16 @@
 // @title Aura API
 // @version 1.0
 // @BasePath /
-// @securityDefinitions.apikey BearerAuth
+// @securityDefinitions.apikey SessionCookie
+// @in cookie
+// @name aura_session
+// @description Browser session cookie, set by POST /api/login or the OIDC callback. Not usable directly via Swagger "Authorize" - log in through the app UI in the same browser tab.
+// @securityDefinitions.apikey ApiKeyAuth
 // @in header
-// @name Authorization
+// @name X-Api-Key
+// @description API key for programmatic/integration access. Generate one under Settings > Authentication, then send it as this header on every request. This is the intended auth method for scripts and integrations - the session cookie above is for browser use only.
+// @securityDefinitions.basic BasicAuth
+// @description Used only by /api/sonarr/webhook, since Sonarr/Radarr's built-in Webhook connection type has no custom-header support. Any username works; the password must be the API key.
 package main
 
 import (

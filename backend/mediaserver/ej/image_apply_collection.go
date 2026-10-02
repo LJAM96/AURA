@@ -22,14 +22,14 @@ func (ej *EJ) ApplyCollectionImage(ctx context.Context, collectionItem *models.C
 
 	// Get the MediUX Image Data
 	formatDate := imageFile.Modified.Format("20060102150405")
-	imageData, _, Err := mediux.GetImage(ctx, imageFile.ID, formatDate, mediux.ImageQualityOriginal)
+	imageData, imageType, Err := mediux.GetImage(ctx, imageFile.ID, formatDate, mediux.ImageQualityOriginal)
 	if Err.Message != "" {
 		return Err
 	}
 
 	if imageFile.Type != "collection_backdrop" {
 		// Apply the Image to the Collection
-		Err = uploadCollectionImage(ctx, collectionItem, imageFile, imageData)
+		Err = uploadCollectionImage(ctx, collectionItem, imageFile, imageData, imageType)
 		if Err.Message != "" {
 			return Err
 		}
@@ -47,7 +47,7 @@ func (ej *EJ) ApplyCollectionImage(ctx context.Context, collectionItem *models.C
 		}
 
 		// Upload the new image
-		Err = uploadCollectionImage(ctx, collectionItem, imageFile, imageData)
+		Err = uploadCollectionImage(ctx, collectionItem, imageFile, imageData, imageType)
 		if Err.Message != "" {
 			return Err
 		}

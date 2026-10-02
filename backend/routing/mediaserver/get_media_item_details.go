@@ -26,7 +26,8 @@ type GetMediaItemDetails_Response struct {
 // @Produce      json
 // @Param        rating_key query string true "Rating Key of the Media Item"
 // @Param        return_type query string false "Return Type (full or item, default is full)"
-// @Security 	 BearerAuth
+// @Security     SessionCookie
+// @Security     ApiKeyAuth
 // @Failure      401  {object}  httpx.UnauthorizedResponse "Unauthorized (only when Auth.Enabled=true)"
 // @Success      200  {object}  httpx.JSONResponse{data=GetMediaItemDetails_Response}
 // @Failure      500  {object}  httpx.JSONResponse "Internal Server Error"
@@ -88,7 +89,7 @@ func GetMediaItemDetails(w http.ResponseWriter, r *http.Request) {
 	// Get the all sets for this TMDB ID
 	switch mediaItem.Type {
 	case "show":
-		showSets, showItems, Err := mediux.GetShowItemSets(ctx, mediaItem.TMDB_ID, mediaItem.LibraryTitle)
+		showSets, showItems, Err := mediux.GetShowItemSets(ctx, mediaItem.TMDB_ID, mediaItem.LibraryTitle, mediaItem.Edition)
 		if Err.Message != "" {
 			logAction.Status = logging.StatusWarn
 			break
@@ -98,13 +99,13 @@ func GetMediaItemDetails(w http.ResponseWriter, r *http.Request) {
 	case "movie":
 		setItems := map[string]models.IncludedItem{}
 		// For Movies, we get Movie Sets and Movie Collection Sets
-		movieSets, Err := mediux.GetMovieItemSets(ctx, mediaItem.TMDB_ID, mediaItem.LibraryTitle, &setItems)
+		movieSets, Err := mediux.GetMovieItemSets(ctx, mediaItem.TMDB_ID, mediaItem.LibraryTitle, mediaItem.Edition, &setItems)
 		if Err.Message != "" {
 			logAction.Status = logging.StatusWarn
 			break
 		}
 		response.PosterSets.Sets = movieSets
-		collectionSets, Err := mediux.GetMovieItemCollectionSets(ctx, mediaItem.TMDB_ID, mediaItem.LibraryTitle, &setItems)
+		collectionSets, Err := mediux.GetMovieItemCollectionSets(ctx, mediaItem.TMDB_ID, mediaItem.LibraryTitle, mediaItem.Edition, &setItems)
 		if Err.Message != "" {
 			logAction.Status = logging.StatusWarn
 			break

@@ -14,11 +14,11 @@ import (
 )
 
 type addItemRequest struct {
-	Complete    bool                     `json:"complete"`
-	MediaItem   models.MediaItem         `json:"media_item"`
-	PosterSet   models.DBPosterSetDetail `json:"poster_set"`
-	AddToDBOnly bool                     `json:"add_to_db_only"` // If true, the item will be added to the database but not have any labels or tags applied. This is for users who want to manage labels and tags manually.
-	AutoAddNewCollectionItems bool       `json:"auto_add_new_collection_items"`
+	Complete                  bool                     `json:"complete"`
+	MediaItem                 models.MediaItem         `json:"media_item"`
+	PosterSet                 models.DBPosterSetDetail `json:"poster_set"`
+	AddToDBOnly               bool                     `json:"add_to_db_only"` // If true, the item will be added to the database but not have any labels or tags applied. This is for users who want to manage labels and tags manually.
+	AutoAddNewCollectionItems bool                     `json:"auto_add_new_collection_items"`
 }
 
 type addItemResponse struct {
@@ -32,7 +32,8 @@ type addItemResponse struct {
 // @Accept       json
 // @Produce      json
 // @Param        req  body      addItemRequest  true  "Add Item Request"
-// @Security 	 BearerAuth
+// @Security     SessionCookie
+// @Security     ApiKeyAuth
 // @Failure      401  {object}  httpx.UnauthorizedResponse "Unauthorized (only when Auth.Enabled=true)"
 // @Success      200           {object}  httpx.JSONResponse{data=addItemResponse}
 // @Failure      500  {object}  httpx.JSONResponse "Internal Server Error"
@@ -98,21 +99,21 @@ func AddNewItemToDB(w http.ResponseWriter, r *http.Request) {
 		// We also need a full PosterSet with ImageFiles
 		switch req.PosterSet.Type {
 		case "show":
-			showSet, _, Err := mediux.GetShowSetByID(ctx, req.PosterSet.ID, req.MediaItem.LibraryTitle)
+			showSet, _, Err := mediux.GetShowSetByID(ctx, req.PosterSet.ID, req.MediaItem.LibraryTitle, req.MediaItem.Edition)
 			if Err.Message != "" {
 				httpx.SendResponse(w, ld, response)
 				return
 			}
 			fullSet.PosterSet = showSet.PosterSet
 		case "movie":
-			movieSet, _, Err := mediux.GetMovieSetByID(ctx, req.PosterSet.ID, req.MediaItem.LibraryTitle)
+			movieSet, _, Err := mediux.GetMovieSetByID(ctx, req.PosterSet.ID, req.MediaItem.LibraryTitle, req.MediaItem.Edition)
 			if Err.Message != "" {
 				httpx.SendResponse(w, ld, response)
 				return
 			}
 			fullSet.PosterSet = movieSet.PosterSet
 		case "collection":
-			collectionSet, _, Err := mediux.GetMovieCollectionSetByID(ctx, req.PosterSet.ID, req.MediaItem.TMDB_ID, req.MediaItem.LibraryTitle, true)
+			collectionSet, _, Err := mediux.GetMovieCollectionSetByID(ctx, req.PosterSet.ID, req.MediaItem.TMDB_ID, req.MediaItem.LibraryTitle, req.MediaItem.Edition, true)
 			if Err.Message != "" {
 				httpx.SendResponse(w, ld, response)
 				return
@@ -142,7 +143,7 @@ func AddNewItemToDB(w http.ResponseWriter, r *http.Request) {
 	// If this is the first time adding the item, we need to update the cache
 	// Run this asynchronously
 	go func() {
-		_, _, dbSets, _ := database.CheckIfMediaItemExists(ctx, saveItem.MediaItem.TMDB_ID, saveItem.MediaItem.LibraryTitle)
+		_, _, dbSets, _ := database.CheckIfMediaItemExists(ctx, saveItem.MediaItem.TMDB_ID, saveItem.MediaItem.LibraryTitle, saveItem.MediaItem.Edition)
 		saveItem.MediaItem.DBSavedSets = dbSets
 		cache.LibraryStore.UpdateMediaItem(saveItem.MediaItem.LibraryTitle, &saveItem.MediaItem)
 	}()

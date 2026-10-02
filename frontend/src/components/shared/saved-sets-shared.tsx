@@ -84,7 +84,8 @@ export const refreshPosterSet = async ({
           savedSet.media_item.library_title,
           savedSet.media_item.tmdb_id,
           set.id,
-          set.type
+          set.type,
+          savedSet.media_item.edition
         );
 
         if (!response || response.status === "error") {

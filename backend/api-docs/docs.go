@@ -35,11 +35,42 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/auth/oidc/callback": {
+            "get": {
+                "description": "Handles the redirect back from the OIDC identity provider, exchanges the authorization code, verifies the ID token, and - if the authenticated identity is allowed - starts a browser session the same way password login does.",
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "OIDC Callback",
+                "responses": {
+                    "302": {
+                        "description": "Found"
+                    }
+                }
+            }
+        },
+        "/api/auth/oidc/login": {
+            "get": {
+                "description": "Redirects to the configured OIDC identity provider to start a browser login. Not usable programmatically - this is a browser redirect flow.",
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Start OIDC Login",
+                "responses": {
+                    "302": {
+                        "description": "Found"
+                    }
+                }
+            }
+        },
         "/api/config": {
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Get the current status of the app configuration and onboarding process",
@@ -80,7 +111,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Update the application configuration",
@@ -141,7 +175,10 @@ const docTemplate = `{
             "patch": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Reload the configuration file and return the current config status",
@@ -186,11 +223,98 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/config/auth-methods": {
+            "get": {
+                "description": "Public, minimal endpoint the login page uses to know which login methods to show (password / OIDC SSO) before the user is authenticated.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Get Available Auth Methods",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpx.JSONResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/routes_auth.authMethodsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/config/auth/api-key": {
+            "post": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Generates a new global API key for programmatic access (e.g. Sonarr/Radarr webhooks, scripts). The plaintext key is returned exactly once in this response and is never stored or retrievable again - copy it immediately. Regenerating replaces (revokes) any previous key immediately.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Generate/Regenerate API Key",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpx.JSONResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/routes_auth.generateAPIKeyResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized (only when Auth.Enabled=true)",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.UnauthorizedResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.JSONResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/config/template-variables": {
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Get all available notification template variables grouped by category and by template type.",
@@ -233,7 +357,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve all media items and their associated poster sets from the database, with optional filtering and pagination.",
@@ -363,7 +490,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Add a Media Item and Poster Set to the database. If the item already exists, it will be updated with the new Media Item and Poster Set information.",
@@ -424,7 +554,10 @@ const docTemplate = `{
             "delete": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Delete a Media Item and all associated Poster Sets from the database based on TMDB ID and Library Title.",
@@ -452,6 +585,12 @@ const docTemplate = `{
                         "name": "library_title",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Edition of the Media Item (e.g. Director's Cut), empty for the standard edition",
+                        "name": "edition",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -490,7 +629,10 @@ const docTemplate = `{
             "patch": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Update a Media Item and its associated Poster Sets in the database. Poster Sets marked with \"to_delete\" will be removed, while others will be upserted.",
@@ -553,7 +695,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Force a check to see if any of the images need to be re-downloaded for a given Media Item and its associated Poster Sets.",
@@ -616,7 +761,10 @@ const docTemplate = `{
             "patch": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Mark a Media Item as ignored in the database, preventing it from being processed by other parts of the application. The ignore can be temporary or permanent based on the mode parameter.",
@@ -644,6 +792,12 @@ const docTemplate = `{
                         "name": "library_title",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Edition of the Media Item (e.g. Director's Cut), empty for the standard edition",
+                        "name": "edition",
+                        "in": "query"
                     },
                     {
                         "type": "string",
@@ -689,6 +843,14 @@ const docTemplate = `{
         },
         "/api/db/ignore/stop": {
             "patch": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "description": "Remove the ignored status from a Media Item in the database, allowing it to be processed by other parts of the application again.",
                 "consumes": [
                     "application/json"
@@ -714,6 +876,12 @@ const docTemplate = `{
                         "name": "library_title",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Edition of the Media Item (e.g. Director's Cut), empty for the standard edition",
+                        "name": "edition",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -735,6 +903,200 @@ const docTemplate = `{
                             ]
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized (only when Auth.Enabled=true)",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.UnauthorizedResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.JSONResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/download/history": {
+            "get": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Retrieve past download history entries (one per poster set per run), including success/warning/error status and per-image failure details.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Download"
+                ],
+                "summary": "Download History - Get Entries",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Max entries to return (default 50)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Offset for pagination (default 0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpx.JSONResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/routes_download.GetDownloadHistory_Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized (only when Auth.Enabled=true)",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.UnauthorizedResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.JSONResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Remove all Download History entries.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Download"
+                ],
+                "summary": "Download History - Clear All",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpx.JSONResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/routes_download.RemoveAllDownloadHistory_Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized (only when Auth.Enabled=true)",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.UnauthorizedResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.JSONResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/download/history/item": {
+            "delete": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Remove a single Download History entry by ID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Download"
+                ],
+                "summary": "Download History - Remove Entry",
+                "parameters": [
+                    {
+                        "description": "History Remove Item Request",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/routes_download.RemoveDownloadHistoryEntry_Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpx.JSONResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/routes_download.RemoveDownloadHistoryEntry_Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized (only when Auth.Enabled=true)",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.UnauthorizedResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -748,7 +1110,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Download and apply an image for a Collection Item in the media server.",
@@ -811,7 +1176,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Download and apply an image for a Media Item in the media server.",
@@ -874,7 +1242,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve the current status of the download queue, including the latest status message, any warnings or errors, and the timestamp of the last update. This endpoint provides insight into the overall health and activity of the download queue.",
@@ -920,16 +1291,72 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Remove all items from the download queue (jobs currently processing are left untouched to avoid orphaning in-flight work).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Download"
+                ],
+                "summary": "Download Queue - Clear All",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpx.JSONResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/routes_download.RemoveAllFromDownloadQueue_Response"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized (only when Auth.Enabled=true)",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.UnauthorizedResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.JSONResponse"
+                        }
+                    }
+                }
             }
         },
         "/api/download/queue/item": {
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
-                "description": "Retrieve the current items in the download queue, categorized by their status (in-progress, warning, error). This endpoint allows clients to monitor the progress of queued download tasks and identify any issues that may have occurred during processing.",
+                "description": "Retrieve the current items in the download queue, each with its status (pending, processing, success, warning, error). This endpoint allows clients to monitor the progress of queued download tasks and identify any issues that may have occurred during processing.",
                 "consumes": [
                     "application/json"
                 ],
@@ -976,7 +1403,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Add a Media Item and its associated Poster Sets to the download queue. The item will be processed by the download worker and removed from the queue once completed.",
@@ -1037,10 +1467,13 @@ const docTemplate = `{
             "delete": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
-                "description": "Remove a specific Media Item from the download queue. This can be used to cancel pending download tasks or clean up items that are no longer needed in the queue.",
+                "description": "Remove a specific Job from the download queue by ID. This can be used to cancel pending download tasks or clean up items that are no longer needed in the queue.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1094,6 +1527,24 @@ const docTemplate = `{
                         }
                     }
                 }
+            }
+        },
+        "/api/download/queue/stream": {
+            "get": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    }
+                ],
+                "description": "Server-Sent Events stream of live download queue updates (job added/started/finished/removed). Sends a full snapshot immediately on connect.",
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "Download"
+                ],
+                "summary": "Download Queue - Stream Events",
+                "responses": {}
             }
         },
         "/api/health": {
@@ -1298,7 +1749,10 @@ const docTemplate = `{
             "delete": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Clear all temporary images from the server's temp-images directory. This endpoint is useful for maintenance and cleanup of temporary files that are no longer needed.",
@@ -1347,7 +1801,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve a list of all scheduled jobs in the system, including their name, description, schedule, and next run time. This endpoint provides insight into the background tasks that are set up to run at specific intervals or times.",
@@ -1394,10 +1851,13 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
-                "description": "Trigger a specific job to run immediately by providing the job name and ID as query parameters. This endpoint allows for manual execution of scheduled jobs outside of their regular schedule, which can be useful for testing or urgent tasks.",
+                "description": "Trigger a specific job to run immediately by providing the job's ID (key) as a query parameter. This endpoint allows for manual execution of a job outside of its regular schedule - including jobs currently disabled from automatic scheduling - which can be useful for testing or urgent tasks.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1409,13 +1869,6 @@ const docTemplate = `{
                 ],
                 "summary": "Run Job",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Name of the Job to Run",
-                        "name": "job_name",
-                        "in": "query",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "ID of the Job to Run",
@@ -1462,7 +1915,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Apply labels and tags to a Media Item in the media server and Sonarr/Radarr.",
@@ -1523,7 +1979,7 @@ const docTemplate = `{
         },
         "/api/login": {
             "post": {
-                "description": "Authenticate user and return a JWT token",
+                "description": "Authenticate with the admin password and start a browser session. On success, an HttpOnly session cookie is set - the response body does not contain a token. Intended for browser/UI use only; for programmatic access use an API key (see the X-Api-Key header on other endpoints).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1573,11 +2029,46 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/logout": {
+            "post": {
+                "description": "Clear the browser session cookie. Safe to call even if no session exists.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Auth Logout",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpx.JSONResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/routes_auth.logoutResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/api/logs": {
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve log entries from the server's log file with optional filtering by log level, status, and route/action. This endpoint allows clients to access and analyze logs for monitoring and debugging purposes.",
@@ -1656,7 +2147,10 @@ const docTemplate = `{
             "delete": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Clear log files from the server. You can choose to clear the current log file or all old log files while keeping the current one. This endpoint is useful for maintenance and managing disk space used by logs.",
@@ -1714,7 +2208,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve a list of movie collections from the media server. This endpoint fetches all movie collections available in the media server's movie libraries, allowing clients to display and interact with the collections of movies configured on the media server.",
@@ -1766,7 +2263,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve all child items of a movie collection from the media server, along with their associated posters. This endpoint accepts a query parameter to identify the collection and returns the child items contained within that collection, as well as any relevant poster sets for those items. This allows clients to display the contents of a movie collection along with visual representations (posters) for each item.",
@@ -1827,7 +2327,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve detailed information about a specific media item from the media server, including its metadata, associated poster sets, and user follow/hide status. This endpoint accepts a rating key as a query parameter to identify the media item and returns comprehensive details that can be used to display the media item information and related sets in the client application.",
@@ -1894,7 +2397,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve a list of library sections from the configured media server. This endpoint fetches the available library sections, including their ID, title, type, and path, allowing clients to display and interact with the media libraries configured on the media server.",
@@ -1946,7 +2452,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve a list of library sections from a specified media server configuration. This endpoint accepts a media server configuration in the request body and returns the available library sections for that media server, allowing clients to display options for users to select which library section they want to interact with.",
@@ -2009,7 +2518,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve items from a specific library section in the media server. This endpoint accepts query parameters to identify the library section and pagination options, and returns the items contained within that library section, allowing clients to display the media items available in the selected library section.",
@@ -2091,7 +2603,10 @@ const docTemplate = `{
             "patch": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Rate a media item on the media server. This endpoint allows clients to submit a user rating for a specific media item, which will be sent to the media server (currently only supported for Plex). The rating should be a number between 0 and 5, and it will be converted to the appropriate scale for the media server before being submitted.",
@@ -2159,7 +2674,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Refresh the metadata of a media item on the media server. This endpoint accepts a rating_key for the media item to be refreshed and an optional refresh_rating_key to specify which metadata entry to refresh. It triggers a metadata refresh on the media server for the specified media item, allowing clients to update the displayed information for that item after changes have been made on the media server or to fix any metadata issues.",
@@ -2227,7 +2745,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve a specific item set (such as a show set for TV shows or a movie set/collection for movies) by its unique identifier. This endpoint accepts query parameters to identify the set, including the set ID, set type (show, movie, or collection), and the library section it belongs to. The response includes details about the set and any related media items that are part of the set, allowing clients to display comprehensive information about the set and its contents in the UI.",
@@ -2268,6 +2789,12 @@ const docTemplate = `{
                         "name": "item_library_title",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Edition of the media item (e.g. Director's Cut), empty for the standard edition",
+                        "name": "edition",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -2308,7 +2835,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve item sets for a specific media item in the library. This endpoint accepts query parameters to identify the media item and its library, and returns any related item sets (such as show sets for TV shows or movie sets/collections for movies) that the media item belongs to, allowing clients to display related items and collections in the UI.",
@@ -2343,6 +2873,12 @@ const docTemplate = `{
                         "name": "item_library_title",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Edition of the media item (e.g. Director's Cut), empty for the standard edition",
+                        "name": "edition",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -2383,7 +2919,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve all item sets created by the specified user in Mediux. This endpoint returns an array of item sets, including details such as the set name, type (show, movie, or collection), and the items contained within each set. This allows clients to display the user's custom collections and preferences within the Mediux ecosystem in the UI.",
@@ -2444,7 +2983,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve the list of users that the current user is following or hiding in Mediux. This endpoint returns an array of user information, including their username, display name, and whether they are being followed or hidden by the current user. This allows clients to display the user's social connections and preferences within the Mediux ecosystem in the UI.",
@@ -2496,7 +3038,10 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Retrieve a new Plex Pin and the associated Plex ID for authentication. This endpoint is used to initiate the Plex authentication process by providing the necessary credentials for the user to authenticate their Plex account.",
@@ -2546,7 +3091,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Check if the provided Plex ID has authenticated with Plex and retrieve available server connections if authenticated. This endpoint is used during the Plex authentication process to verify the user's Plex account and gather necessary information for integration.",
@@ -2677,11 +3225,348 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/validate/mediaserver": {
+        "/api/sonarr/webhook": {
+            "post": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Receives Sonarr/Radarr \"On Import\"/\"On Upgrade\" webhook events. Requires HTTP Basic Auth since Sonarr/Radarr's built-in Webhook connection type has no custom-header support - set the Username field to anything, and the Password field to your AURA API key (Settings \u003e Auth).",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Sonarr/Radarr"
+                ],
+                "summary": "Sonarr/Radarr Webhook",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.JSONResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - missing or invalid Basic Auth",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.UnauthorizedResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/subscriptions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve all user subscriptions. Returns an array of subscriptions with their configuration including image types, media scope, and enabled status.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Get All User Subscriptions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpx.JSONResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/routes_subscriptions.getAllSubscriptionsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized (only when Auth.Enabled=true)",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.UnauthorizedResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.JSONResponse"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
                         "BearerAuth": []
+                    }
+                ],
+                "description": "Create or update a subscription for a MediUX creator. When a subscription is active, new sets from this creator matching the specified image types and media scope will be automatically downloaded.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Create User Subscription",
+                "parameters": [
+                    {
+                        "description": "Subscription Configuration",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/routes_subscriptions.createSubscriptionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpx.JSONResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/routes_subscriptions.createSubscriptionResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized (only when Auth.Enabled=true)",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.UnauthorizedResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.JSONResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/subscriptions/username": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Check if a subscription exists for a specific MediUX creator username. Returns the subscription details if found, or an empty response with subscribed=false.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Get User Subscription by Username",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "MediUX creator username",
+                        "name": "username",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpx.JSONResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/routes_subscriptions.getSubscriptionByUsernameResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized (only when Auth.Enabled=true)",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.UnauthorizedResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.JSONResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/subscriptions/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update an existing user subscription configuration. This allows changing image types, media scope, library section, or enabled status.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Update User Subscription",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Subscription ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Updated Subscription Configuration",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/routes_subscriptions.updateSubscriptionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpx.JSONResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/routes_subscriptions.updateSubscriptionResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized (only when Auth.Enabled=true)",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.UnauthorizedResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.JSONResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete a user subscription. This stops automatic downloading of new sets from the creator. Existing saved sets are not affected.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Delete User Subscription",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Subscription ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/httpx.JSONResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/routes_subscriptions.deleteSubscriptionResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized (only when Auth.Enabled=true)",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.UnauthorizedResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpx.JSONResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/validate/mediaserver": {
+            "post": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Validate the provided media server information by attempting to connect to the media server. This endpoint is used during the onboarding process to ensure that the media server settings entered by the user are correct and that a connection can be established. The response will indicate whether the connection was successful and provide details about the media server if it was validated successfully.",
@@ -2744,7 +3629,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Validate the provided Mediux API token by attempting to connect to the Mediux site. This endpoint is used during the onboarding process to ensure that the Mediux settings entered by the user are correct and that a connection can be established. The response will indicate whether the connection was successful.",
@@ -2807,7 +3695,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Send a test notification using the specified notification provider. This endpoint is used to verify that the notification settings are correct and that notifications can be sent successfully. The request should include the notification provider information, and the response will indicate whether the test notification was sent successfully or if there were any errors.",
@@ -2870,7 +3761,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Validate the provided Sonarr/Radarr information by attempting to connect to the application. This endpoint is used during the onboarding process to ensure that the Sonarr/Radarr settings entered by the user are correct and that a connection can be established. The response will indicate whether the connection was successful and provide details about the application if it was validated successfully.",
@@ -2933,7 +3827,10 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
                 "description": "Validate the provided Sonarr/Radarr information by attempting to connect to the application. This endpoint is used during the onboarding process to ensure that the Sonarr/Radarr settings entered by the user are correct and that a connection can be established. The response will indicate whether the connection was successful and provide details about the application if it was validated successfully.",
@@ -3045,14 +3942,6 @@ const docTemplate = `{
                         }
                     ]
                 },
-                "auto_download": {
-                    "description": "Auto-download settings.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/config.Config_AutoDownload"
-                        }
-                    ]
-                },
                 "database": {
                     "description": "Database configuration settings.",
                     "allOf": [
@@ -3066,6 +3955,14 @@ const docTemplate = `{
                     "allOf": [
                         {
                             "$ref": "#/definitions/config.Config_Images"
+                        }
+                    ]
+                },
+                "jobs": {
+                    "description": "Background jobs scheduling configuration.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/config.Config_Jobs"
                         }
                     ]
                 },
@@ -3130,26 +4027,75 @@ const docTemplate = `{
         "config.Config_Auth": {
             "type": "object",
             "properties": {
+                "allowed_origins": {
+                    "description": "AllowedOrigins is an optional list of extra origins allowed to make credentialed\ncross-origin requests (cookies/API key headers). The standard deployment (Next.js server\nproxying /api/* to the Go backend) never needs this - the browser only ever talks to one\norigin. Only set this if you're calling the API directly from a different origin.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "enabled": {
                     "description": "Whether to enable authentication.",
                     "type": "boolean"
                 },
+                "oidc": {
+                    "description": "OIDC (Single Sign-On) login settings.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/config.Config_Auth_OIDC"
+                        }
+                    ]
+                },
                 "password": {
                     "description": "Password for authentication.",
                     "type": "string"
+                },
+                "session_cookie_secure": {
+                    "description": "SessionCookieSecure controls the Secure attribute of the browser session cookie.",
+                    "type": "string"
+                },
+                "trust_proxy_for_cookie_secure": {
+                    "description": "TrustProxyForCookieSecure, when true, also treats X-Forwarded-Proto: https as a secure transport\nsignal (for reverse-proxy TLS termination setups). Defaults to false since that header is\nattacker-controllable unless the proxy is guaranteed to strip/overwrite it.",
+                    "type": "boolean"
                 }
             }
         },
-        "config.Config_AutoDownload": {
+        "config.Config_Auth_OIDC": {
             "type": "object",
             "properties": {
-                "cron": {
-                    "description": "Cron expression for scheduling auto-downloads.",
+                "allowed_domains": {
+                    "description": "Optional allowlist of email domains (e.g. \"example.com\") permitted to log in via OIDC. Empty = any domain allowed.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "allowed_emails": {
+                    "description": "Optional allowlist of exact emails permitted to log in via OIDC. Empty = any authenticated IdP user is allowed.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "client_id": {
+                    "description": "OIDC client ID.",
+                    "type": "string"
+                },
+                "client_secret": {
+                    "description": "OIDC client secret.",
                     "type": "string"
                 },
                 "enabled": {
-                    "description": "Whether auto-download is enabled.",
+                    "description": "Whether OIDC (Single Sign-On) login is enabled.",
                     "type": "boolean"
+                },
+                "issuer_url": {
+                    "description": "OIDC issuer URL (used for discovery).",
+                    "type": "string"
+                },
+                "redirect_url": {
+                    "description": "Full callback URL registered with the IdP, e.g. https://aura.example.com/api/auth/oidc/callback.",
+                    "type": "string"
                 }
             }
         },
@@ -3236,6 +4182,79 @@ const docTemplate = `{
                     "allOf": [
                         {
                             "$ref": "#/definitions/config.Config_SaveImagesLocally"
+                        }
+                    ]
+                }
+            }
+        },
+        "config.Config_JobSetting": {
+            "type": "object",
+            "properties": {
+                "cron": {
+                    "description": "Cron expression for the job schedule.",
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "config.Config_Jobs": {
+            "type": "object",
+            "properties": {
+                "auto_download": {
+                    "description": "Schedule for auto-downloads.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/config.Config_JobSetting"
+                        }
+                    ]
+                },
+                "check_for_media_item_changes": {
+                    "description": "Schedule for checking rating keys and metadata changes.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/config.Config_JobSetting"
+                        }
+                    ]
+                },
+                "check_mediux_site_link": {
+                    "description": "Schedule for checking MediUX site link availability.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/config.Config_JobSetting"
+                        }
+                    ]
+                },
+                "handle_temp_ignored_items": {
+                    "description": "Schedule for checking if temporarily ignored items now have sets on MediUX.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/config.Config_JobSetting"
+                        }
+                    ]
+                },
+                "refresh_media_items_and_collections": {
+                    "description": "Schedule for refreshing media items and collections from media server.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/config.Config_JobSetting"
+                        }
+                    ]
+                },
+                "refresh_mediux_users": {
+                    "description": "Schedule for refreshing tracked MediUX users/creators.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/config.Config_JobSetting"
+                        }
+                    ]
+                },
+                "subscription_check": {
+                    "description": "Schedule for checking subscribed creators for new sets.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/config.Config_JobSetting"
                         }
                     ]
                 }
@@ -3596,6 +4615,106 @@ const docTemplate = `{
                 }
             }
         },
+        "database.DownloadHistoryEntry": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "edition": {
+                    "type": "string"
+                },
+                "failed_images": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ImageDownloadResult"
+                    }
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "images_failed": {
+                    "type": "integer"
+                },
+                "images_succeeded": {
+                    "type": "integer"
+                },
+                "library_title": {
+                    "type": "string"
+                },
+                "media_item_title": {
+                    "type": "string"
+                },
+                "media_item_year": {
+                    "type": "integer"
+                },
+                "rating_key": {
+                    "type": "string"
+                },
+                "set_id": {
+                    "type": "string"
+                },
+                "set_title": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tmdb_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "database.DownloadQueueJob": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "edition": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "item": {
+                    "$ref": "#/definitions/models.DBSavedItem"
+                },
+                "library_title": {
+                    "type": "string"
+                },
+                "media_item_title": {
+                    "type": "string"
+                },
+                "result_errors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "result_message": {
+                    "type": "string"
+                },
+                "result_warnings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tmdb_id": {
+                    "type": "string"
+                }
+            }
+        },
         "downloadqueue.Status": {
             "type": "string",
             "enum": [
@@ -3638,8 +4757,14 @@ const docTemplate = `{
         "jobs.JobInfo": {
             "type": "object",
             "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "job_name": {
                     "type": "string"
@@ -4019,6 +5144,10 @@ const docTemplate = `{
                     "description": "Global popularity score of the set",
                     "type": "integer"
                 },
+                "priority": {
+                    "description": "1 = highest priority, higher number = lower priority (0 = not from subscription)",
+                    "type": "integer"
+                },
                 "selected_types": {
                     "$ref": "#/definitions/models.SelectedTypes"
                 },
@@ -4065,6 +5194,26 @@ const docTemplate = `{
                 },
                 "user_created": {
                     "type": "string"
+                }
+            }
+        },
+        "models.ImageDownloadResult": {
+            "type": "object",
+            "properties": {
+                "episode_number": {
+                    "type": "integer"
+                },
+                "failure_reason": {
+                    "type": "string"
+                },
+                "image_type": {
+                    "type": "string"
+                },
+                "season_number": {
+                    "type": "integer"
+                },
+                "success": {
+                    "type": "boolean"
                 }
             }
         },
@@ -4188,6 +5337,10 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/models.DBSavedSet"
                     }
+                },
+                "edition": {
+                    "description": "Edition of the media item (e.g., \"Director's Cut\")",
+                    "type": "string"
                 },
                 "guids": {
                     "description": "Used in MediaItem Details Page - For ratings",
@@ -4483,6 +5636,42 @@ const docTemplate = `{
                 }
             }
         },
+        "models.UserSubscription": {
+            "type": "object",
+            "properties": {
+                "creator_id": {
+                    "type": "string"
+                },
+                "date_created": {
+                    "type": "string"
+                },
+                "date_updated": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "image_types": {
+                    "$ref": "#/definitions/models.SelectedTypes"
+                },
+                "library_section": {
+                    "type": "string"
+                },
+                "media_scope": {
+                    "type": "string"
+                },
+                "priority": {
+                    "description": "1 = highest priority, higher number = lower priority",
+                    "type": "integer"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "plex.PlexServerConnections": {
             "type": "object",
             "properties": {
@@ -4526,6 +5715,26 @@ const docTemplate = `{
                 }
             }
         },
+        "routes_auth.authMethodsResponse": {
+            "type": "object",
+            "properties": {
+                "oidc_enabled": {
+                    "type": "boolean"
+                },
+                "password_enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "routes_auth.generateAPIKeyResponse": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "description": "APIKey is the plaintext key. It is only ever returned here, once - it is not stored and\ncannot be retrieved again. Only its Argon2id hash is persisted.",
+                    "type": "string"
+                }
+            }
+        },
         "routes_auth.loginRequest": {
             "type": "object",
             "properties": {
@@ -4537,8 +5746,16 @@ const docTemplate = `{
         "routes_auth.loginResponse": {
             "type": "object",
             "properties": {
-                "token": {
-                    "type": "string"
+                "authenticated": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "routes_auth.logoutResponse": {
+            "type": "object",
+            "properties": {
+                "logged_out": {
+                    "type": "boolean"
                 }
             }
         },
@@ -4556,6 +5773,10 @@ const docTemplate = `{
         "routes_config.AppConfigStatus": {
             "type": "object",
             "properties": {
+                "api_key_configured": {
+                    "description": "Whether a global API key has been generated (the key itself is never exposed)",
+                    "type": "boolean"
+                },
                 "app_fully_loaded": {
                     "description": "Whether the app is fully loaded and ready to use",
                     "type": "boolean"
@@ -4816,23 +6037,25 @@ const docTemplate = `{
         "routes_download.GetAllDownloadQueueItems_Response": {
             "type": "object",
             "properties": {
-                "error_entries": {
+                "jobs": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.DBSavedItem"
+                        "$ref": "#/definitions/database.DownloadQueueJob"
+                    }
+                }
+            }
+        },
+        "routes_download.GetDownloadHistory_Response": {
+            "type": "object",
+            "properties": {
+                "entries": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/database.DownloadHistoryEntry"
                     }
                 },
-                "in_progress_entries": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.DBSavedItem"
-                    }
-                },
-                "warning_entries": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.DBSavedItem"
-                    }
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -4862,11 +6085,43 @@ const docTemplate = `{
                 }
             }
         },
+        "routes_download.RemoveAllDownloadHistory_Response": {
+            "type": "object",
+            "properties": {
+                "result": {
+                    "type": "string"
+                }
+            }
+        },
+        "routes_download.RemoveAllFromDownloadQueue_Response": {
+            "type": "object",
+            "properties": {
+                "result": {
+                    "type": "string"
+                }
+            }
+        },
+        "routes_download.RemoveDownloadHistoryEntry_Request": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "routes_download.RemoveDownloadHistoryEntry_Response": {
+            "type": "object",
+            "properties": {
+                "result": {
+                    "type": "string"
+                }
+            }
+        },
         "routes_download.RemoveItemFromDownloadQueue_Request": {
             "type": "object",
             "properties": {
-                "item": {
-                    "$ref": "#/definitions/models.DBSavedItem"
+                "job_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -5190,6 +6445,95 @@ const docTemplate = `{
                 }
             }
         },
+        "routes_subscriptions.createSubscriptionRequest": {
+            "type": "object",
+            "properties": {
+                "creator_id": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "image_types": {
+                    "$ref": "#/definitions/models.SelectedTypes"
+                },
+                "library_section": {
+                    "type": "string"
+                },
+                "media_scope": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "routes_subscriptions.createSubscriptionResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "routes_subscriptions.deleteSubscriptionResponse": {
+            "type": "object",
+            "properties": {
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "routes_subscriptions.getAllSubscriptionsResponse": {
+            "type": "object",
+            "properties": {
+                "subscriptions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.UserSubscription"
+                    }
+                }
+            }
+        },
+        "routes_subscriptions.getSubscriptionByUsernameResponse": {
+            "type": "object",
+            "properties": {
+                "subscribed": {
+                    "type": "boolean"
+                },
+                "subscription": {
+                    "$ref": "#/definitions/models.UserSubscription"
+                }
+            }
+        },
+        "routes_subscriptions.updateSubscriptionRequest": {
+            "type": "object",
+            "properties": {
+                "creator_id": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "image_types": {
+                    "$ref": "#/definitions/models.SelectedTypes"
+                },
+                "library_section": {
+                    "type": "string"
+                },
+                "media_scope": {
+                    "type": "string"
+                }
+            }
+        },
+        "routes_subscriptions.updateSubscriptionResponse": {
+            "type": "object",
+            "properties": {
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
         "routes_validation.SendTestNotification_Request": {
             "type": "object",
             "properties": {
@@ -5274,10 +6618,20 @@ const docTemplate = `{
         }
     },
     "securityDefinitions": {
-        "BearerAuth": {
+        "ApiKeyAuth": {
+            "description": "API key for programmatic/integration access. Generate one under Settings \u003e Authentication, then send it as this header on every request. This is the intended auth method for scripts and integrations - the session cookie above is for browser use only.",
             "type": "apiKey",
-            "name": "Authorization",
+            "name": "X-Api-Key",
             "in": "header"
+        },
+        "BasicAuth": {
+            "type": "basic"
+        },
+        "SessionCookie": {
+            "description": "Browser session cookie, set by POST /api/login or the OIDC callback. Not usable directly via Swagger \"Authorize\" - log in through the app UI in the same browser tab.",
+            "type": "apiKey",
+            "name": "aura_session",
+            "in": "cookie"
         }
     }
 }`
@@ -5289,7 +6643,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "Aura API",
-	Description:      "",
+	Description:      "Used only by /api/sonarr/webhook, since Sonarr/Radarr's built-in Webhook connection type has no custom-header support. Any username works; the password must be the API key.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

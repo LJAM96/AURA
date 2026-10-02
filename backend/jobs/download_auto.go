@@ -8,6 +8,32 @@ import (
 	"runtime/debug"
 )
 
+func runAutoDownloadJobBody(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			logging.LOGGER.Error().
+				Timestamp().
+				Interface("recover", r).
+				Str("stack", string(debug.Stack())).
+				Msg("PANIC: in AutoDownload Job")
+		}
+	}()
+	ctx, ld := logging.CreateLoggingContext(ctx, "Cron Job")
+	action := ld.AddAction("AutoDownload Check", logging.LevelInfo)
+	ctx = logging.WithCurrentAction(ctx, action)
+	Err := autodownload.CheckAllItems(ctx)
+	if Err.Message != "" {
+		logging.LOGGER.Error().Timestamp().Str("error", Err.Message).
+			Str("next_run", nextRunString(JobKeyAutoDownload)).
+			Msg("Error running AutoDownload Job")
+	} else {
+		logging.LOGGER.Info().Timestamp().
+			Str("next_run", nextRunString(JobKeyAutoDownload)).
+			Msg("AutoDownload Job Completed")
+	}
+	ld.Log()
+}
+
 func StartAutoDownloadJob() error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -17,52 +43,19 @@ func StartAutoDownloadJob() error {
 		return nil
 	}
 
-	if autodownloadJobID != 0 {
-		c.Remove(autodownloadJobID)
-		autodownloadJobID = 0
-	}
+	removeScheduledJob(JobKeyAutoDownload)
 
-	enabled := config.Current.AutoDownload.Enabled
+	enabled, spec := config.Current.Jobs.AutoDownload.Resolve(config.JobDefaults.AutoDownload)
 	if !enabled {
 		logging.LOGGER.Info().Timestamp().Msg("AutoDownload Job Stopped")
 		return nil
 	}
 
-	spec := config.Current.AutoDownload.Cron
-	if spec == "" {
-		spec = "0 0 * * *" // Default to daily at midnight
-	}
-
-	var err error
-
-	autodownloadJobID, err = c.AddFunc(spec, func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logging.LOGGER.Error().
-					Timestamp().
-					Interface("recover", r).
-					Str("stack", string(debug.Stack())).
-					Msg("PANIC: in scheduled AutoDownload Job")
-			}
-		}()
-		ctx, ld := logging.CreateLoggingContext(context.Background(), "Cron Job")
-		action := ld.AddAction("AutoDownload Check", logging.LevelInfo)
-		ctx = logging.WithCurrentAction(ctx, action)
-		Err := autodownload.CheckAllItems(ctx)
-		if Err.Message != "" {
-			logging.LOGGER.Error().Timestamp().Str("error", Err.Message).
-				Str("next_run", c.Entry(autodownloadJobID).Next.String()).
-				Msg("Error running AutoDownload Job")
-		} else {
-			logging.LOGGER.Info().Timestamp().
-				Str("next_run", c.Entry(autodownloadJobID).Next.String()).
-				Msg("AutoDownload Job Completed")
-		}
-	})
-	if err != nil {
+	if err := addScheduledJob(JobKeyAutoDownload, spec, func() {
+		runAutoDownloadJobBody(context.Background())
+	}); err != nil {
 		return err
 	}
-	jobSpecs[autodownloadJobID] = spec
 
 	logging.LOGGER.Info().Timestamp().
 		Str("cron", spec).
@@ -71,43 +64,8 @@ func StartAutoDownloadJob() error {
 }
 
 func RunAutoDownloadJobNow() {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if config.Current.AutoDownload.Enabled == false {
-		logging.LOGGER.Warn().Timestamp().Msg("AutoDownload is disabled, cannot run job")
-		return
-	}
-
-	if c == nil {
-		logging.LOGGER.Error().Timestamp().Msg("Cron Jobs Scheduler is not initialized")
-		return
-	}
-
-	if autodownloadJobID == 0 {
-		logging.LOGGER.Error().Timestamp().Msg("AutoDownload Job is not scheduled")
-		return
-	}
-
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logging.LOGGER.Error().Timestamp().Interface("recover", r).Msg("Panic in AutoDownload Job")
-			}
-		}()
-		ctx, ld := logging.CreateLoggingContext(context.Background(), "Manual Job Run")
-		action := ld.AddAction("AutoDownload Check", logging.LevelInfo)
-		ctx = logging.WithCurrentAction(ctx, action)
-		Err := autodownload.CheckAllItems(ctx)
-		if Err.Message != "" {
-			logging.LOGGER.Error().Timestamp().Str("error", Err.Message).
-				Str("next_run", c.Entry(autodownloadJobID).Next.String()).
-				Msg("Error running Manual AutoDownload Job")
-			return
-		} else {
-			logging.LOGGER.Info().Timestamp().
-				Str("next_run", c.Entry(autodownloadJobID).Next.String()).
-				Msg("Manual AutoDownload Job Completed")
-		}
+		recordManualRun(JobKeyAutoDownload)
+		runAutoDownloadJobBody(context.Background())
 	}()
 }

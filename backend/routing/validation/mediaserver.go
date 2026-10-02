@@ -26,7 +26,8 @@ type ValidateMediaServerInfo_Response struct {
 // @Accept       json
 // @Produce      json
 // @Param        media_server body ValidateMediaServerInfo_Request true "Media Server Information to Validate"
-// @Security 	 BearerAuth
+// @Security     SessionCookie
+// @Security     ApiKeyAuth
 // @Failure      401  {object}  httpx.UnauthorizedResponse "Unauthorized (only when Auth.Enabled=true)"
 // @Success      200  {object}  httpx.JSONResponse{data=ValidateMediaServerInfo_Response}
 // @Failure      500  {object}  httpx.JSONResponse "Internal Server Error"

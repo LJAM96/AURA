@@ -535,8 +535,8 @@ const UserSetPage = () => {
             mediaItem &&
             typeof mediaItem !== "boolean" &&
             mediaItem.rating_key &&
-            mediaItem.db_saved_sets.length > 0 &&
-            mediaItem.db_saved_sets.some((savedSet) => savedSet.id === set.id)
+            (mediaItem.db_saved_sets ?? []).length > 0 &&
+            (mediaItem.db_saved_sets ?? []).some((savedSet) => savedSet.id === set.id)
           );
         })
       );
@@ -549,7 +549,7 @@ const UserSetPage = () => {
           const mediaItem = setIncludedItems?.[tmdbId]?.media_item;
           return (
             !mediaItem ||
-            (typeof mediaItem !== "boolean" && mediaItem.rating_key && mediaItem.db_saved_sets.length === 0)
+            (typeof mediaItem !== "boolean" && mediaItem.rating_key && (mediaItem.db_saved_sets ?? []).length === 0)
           );
         })
       );
@@ -563,8 +563,10 @@ const UserSetPage = () => {
             mediaItem &&
             typeof mediaItem !== "boolean" &&
             mediaItem.rating_key &&
-            mediaItem.db_saved_sets.length > 0 &&
-            mediaItem.db_saved_sets.every((savedSet) => savedSet.id !== set.id && savedSet.user_created !== username)
+            (mediaItem.db_saved_sets ?? []).length > 0 &&
+            (mediaItem.db_saved_sets ?? []).every(
+              (savedSet) => savedSet.id !== set.id && savedSet.user_created !== username
+            )
           );
         })
       );
@@ -582,7 +584,7 @@ const UserSetPage = () => {
                 mediaItem &&
                 typeof mediaItem !== "boolean" &&
                 mediaItem.rating_key &&
-                mediaItem.db_saved_sets.some((savedSet) => savedSet.id === set.id)
+                (mediaItem.db_saved_sets ?? []).some((savedSet) => savedSet.id === set.id)
               );
             })
           )
@@ -599,7 +601,7 @@ const UserSetPage = () => {
               const mediaItem = setIncludedItems && setIncludedItems[tmdbId].media_item;
               return (
                 !mediaItem ||
-                (typeof mediaItem !== "boolean" && mediaItem.rating_key && mediaItem.db_saved_sets.length === 0)
+                (typeof mediaItem !== "boolean" && mediaItem.rating_key && (mediaItem.db_saved_sets ?? []).length === 0)
               );
             })
           )
@@ -618,7 +620,7 @@ const UserSetPage = () => {
                 mediaItem &&
                 typeof mediaItem !== "boolean" &&
                 mediaItem.rating_key &&
-                mediaItem.db_saved_sets.every(
+                (mediaItem.db_saved_sets ?? []).every(
                   (savedSet) => savedSet.id !== set.id && savedSet.user_created !== username
                 )
               );
@@ -1183,86 +1185,89 @@ const UserSetPage = () => {
                         {activeTab === "movieSets" && (
                           <TabsContent value="movieSets">
                             <ResponsiveGrid size="regular">
-                              {(paginatedActiveItems as SetRef[]).map((set) => (
-                                <div
-                                  key={set.id}
-                                  className="relative flex flex-col items-center p-2 border rounded-md"
-                                  style={{
-                                    background: "oklch(0.16 0.0202 282.55)",
-                                    opacity: "0.95",
-                                    padding: "0.5rem",
-                                  }}
-                                >
-                                  <div className="relative w-full mb-1">
-                                    {/* Download Button - absolute top right */}
-                                    <div className="absolute top-0 right-0 z-10">
-                                      <DownloadModal
-                                        baseSetInfo={set}
-                                        formItems={setRefsToFormItems([set], setIncludedItems || {})}
-                                      />
-                                    </div>
-                                    {/* Set Name */}
-                                    <P className="text-primary-dynamic text-sm font-semibold w-full mb-1 truncate pr-10">
-                                      {set.title}
-                                    </P>
-                                  </div>
-
-                                  {/* Set User Name */}
-                                  <div className="flex items-center justify-start w-full mb-1">
-                                    <div className="flex items-center gap-1">
-                                      <Avatar className="rounded-lg mr-1 w-4 h-4">
-                                        <AvatarImage
-                                          src={`/api/images/mediux/avatar?username=${set.user_created}`}
-                                          className="w-4 h-4"
+                              {(paginatedActiveItems as SetRef[]).map((set) => {
+                                const setImages = set.images ?? [];
+                                return (
+                                  <div
+                                    key={set.id}
+                                    className="relative flex flex-col items-center p-2 border rounded-md"
+                                    style={{
+                                      background: "oklch(0.16 0.0202 282.55)",
+                                      opacity: "0.95",
+                                      padding: "0.5rem",
+                                    }}
+                                  >
+                                    <div className="relative w-full mb-1">
+                                      {/* Download Button - absolute top right */}
+                                      <div className="absolute top-0 right-0 z-10">
+                                        <DownloadModal
+                                          baseSetInfo={set}
+                                          formItems={setRefsToFormItems([set], setIncludedItems || {})}
                                         />
-                                        <AvatarFallback className="">
-                                          <User className="w-4 h-4" />
-                                        </AvatarFallback>
-                                      </Avatar>
-                                      <Link
-                                        href={`/user/${set.user_created}`}
-                                        className="text-sm hover:text-primary cursor-pointer underline truncate"
-                                        style={{ wordBreak: "break-word" }}
-                                      >
-                                        {set.user_created}
-                                      </Link>
+                                      </div>
+                                      {/* Set Name */}
+                                      <P className="text-primary-dynamic text-sm font-semibold w-full mb-1 truncate pr-10">
+                                        {set.title}
+                                      </P>
                                     </div>
-                                  </div>
 
-                                  {/* Last Update */}
-                                  <Lead className="text-sm text-muted-foreground w-full mb-2">
-                                    Last Update:{" "}
-                                    {formatLastUpdatedDate(
-                                      set.date_updated,
-                                      set.date_created || set.images[0]?.modified || ""
+                                    {/* Set User Name */}
+                                    <div className="flex items-center justify-start w-full mb-1">
+                                      <div className="flex items-center gap-1">
+                                        <Avatar className="rounded-lg mr-1 w-4 h-4">
+                                          <AvatarImage
+                                            src={`/api/images/mediux/avatar?username=${set.user_created}`}
+                                            className="w-4 h-4"
+                                          />
+                                          <AvatarFallback className="">
+                                            <User className="w-4 h-4" />
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <Link
+                                          href={`/user/${set.user_created}`}
+                                          className="text-sm hover:text-primary cursor-pointer underline truncate"
+                                          style={{ wordBreak: "break-word" }}
+                                        >
+                                          {set.user_created}
+                                        </Link>
+                                      </div>
+                                    </div>
+
+                                    {/* Last Update */}
+                                    <Lead className="text-sm text-muted-foreground w-full mb-2">
+                                      Last Update:{" "}
+                                      {formatLastUpdatedDate(
+                                        set.date_updated,
+                                        set.date_created || setImages[0]?.modified || ""
+                                      )}
+                                    </Lead>
+
+                                    {/* Poster */}
+                                    {setImages.find((image) => image.type === "poster") && (
+                                      <AssetImage
+                                        image={setImages.find((image) => image.type === "poster")!}
+                                        imageType="mediux"
+                                        aspect="poster"
+                                        className="w-full mb-2"
+                                        includedItems={setIncludedItems || {}}
+                                        matchedToItem={true}
+                                      />
                                     )}
-                                  </Lead>
 
-                                  {/* Poster */}
-                                  {set.images.find((image) => image.type === "poster") && (
-                                    <AssetImage
-                                      image={set.images.find((image) => image.type === "poster")!}
-                                      imageType="mediux"
-                                      aspect="poster"
-                                      className="w-full mb-2"
-                                      includedItems={setIncludedItems || {}}
-                                      matchedToItem={true}
-                                    />
-                                  )}
-
-                                  {/* Backdrop */}
-                                  {set.images.find((image) => image.type === "backdrop") && (
-                                    <AssetImage
-                                      image={set.images.find((image) => image.type === "backdrop")!}
-                                      imageType="mediux"
-                                      aspect="backdrop"
-                                      className="w-full"
-                                      includedItems={setIncludedItems || {}}
-                                      matchedToItem={true}
-                                    />
-                                  )}
-                                </div>
-                              ))}
+                                    {/* Backdrop */}
+                                    {setImages.find((image) => image.type === "backdrop") && (
+                                      <AssetImage
+                                        image={setImages.find((image) => image.type === "backdrop")!}
+                                        imageType="mediux"
+                                        aspect="backdrop"
+                                        className="w-full"
+                                        includedItems={setIncludedItems || {}}
+                                        matchedToItem={true}
+                                      />
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </ResponsiveGrid>
                           </TabsContent>
                         )}

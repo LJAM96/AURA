@@ -24,7 +24,8 @@ type GetAllCollectionChildrenItems_Response struct {
 // @Accept       json
 // @Produce      json
 // @Param        rating_key query string true "Rating Key of the Collection"
-// @Security 	 BearerAuth
+// @Security     SessionCookie
+// @Security     ApiKeyAuth
 // @Failure      401  {object}  httpx.UnauthorizedResponse "Unauthorized (only when Auth.Enabled=true)"
 // @Success      200  {object}  httpx.JSONResponse{data=GetAllCollectionChildrenItems_Response}
 // @Failure      500  {object}  httpx.JSONResponse "Internal Server Error"

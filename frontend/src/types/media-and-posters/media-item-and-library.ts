@@ -13,6 +13,7 @@ export interface LibrarySection extends LibrarySectionBase {
 export interface MediaItem {
   tmdb_id: string;
   library_title: string;
+  edition: string;
   rating_key: string;
   type: "show" | "movie";
   title: string;
