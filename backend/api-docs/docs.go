@@ -6463,6 +6463,9 @@ const docTemplate = `{
                 "media_scope": {
                     "type": "string"
                 },
+                "priority": {
+                    "type": "integer"
+                },
                 "username": {
                     "type": "string"
                 }
@@ -6523,6 +6526,9 @@ const docTemplate = `{
                 },
                 "media_scope": {
                     "type": "string"
+                },
+                "priority": {
+                    "type": "integer"
                 }
             }
         },

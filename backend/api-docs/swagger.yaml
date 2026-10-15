@@ -1724,6 +1724,8 @@ definitions:
         type: string
       media_scope:
         type: string
+      priority:
+        type: integer
       username:
         type: string
     type: object
@@ -1763,6 +1765,8 @@ definitions:
         type: string
       media_scope:
         type: string
+      priority:
+        type: integer
     type: object
   routes_subscriptions.updateSubscriptionResponse:
     properties:

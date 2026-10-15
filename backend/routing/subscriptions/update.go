@@ -12,6 +12,7 @@ import (
 type updateSubscriptionRequest struct {
 	CreatorID      string               `json:"creator_id"`
 	ImageTypes     models.SelectedTypes `json:"image_types"`
+	Priority       int                  `json:"priority"`
 	MediaScope     string               `json:"media_scope"`
 	LibrarySection *string              `json:"library_section"`
 	Enabled        bool                 `json:"enabled"`
@@ -74,6 +75,7 @@ func UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 		ID:             id,
 		CreatorID:      req.CreatorID,
 		ImageTypes:     req.ImageTypes,
+		Priority:       req.Priority,
 		MediaScope:     req.MediaScope,
 		LibrarySection: req.LibrarySection,
 		Enabled:        req.Enabled,

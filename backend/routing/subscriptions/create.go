@@ -12,6 +12,7 @@ type createSubscriptionRequest struct {
 	Username       string              `json:"username"`
 	CreatorID      string              `json:"creator_id"`
 	ImageTypes     models.SelectedTypes `json:"image_types"`
+	Priority       int                 `json:"priority"`
 	MediaScope     string              `json:"media_scope"`
 	LibrarySection *string             `json:"library_section"`
 	Enabled        bool                `json:"enabled"`
@@ -72,6 +73,7 @@ func CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		Username:       req.Username,
 		CreatorID:      req.CreatorID,
 		ImageTypes:     req.ImageTypes,
+		Priority:       req.Priority,
 		MediaScope:     req.MediaScope,
 		LibrarySection: req.LibrarySection,
 		Enabled:        req.Enabled,
