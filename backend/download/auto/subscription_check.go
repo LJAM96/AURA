@@ -222,6 +222,37 @@ func processSubscriptionSet(ctx context.Context, sub models.UserSubscription, se
 	logAction.AppendResult("set_id", set.ID)
 	logAction.AppendResult("item", utils.MediaItemInfo(*foundItem))
 
+	// Immediately download the newly added set's images so the user doesn't
+	// have to wait for the next AutoDownload job run. Re-fetch the full saved
+	// item so the priority-based fallback logic sees all of its sets.
+	savedItems, fetchErr := database.GetAllSavedSets(ctx, models.DBFilter{
+		ItemTMDB_ID:      itemTMDBID,
+		ItemLibraryTitle: foundItem.LibraryTitle,
+		ItemsPerPage:     -1,
+	})
+	if fetchErr.Message != "" {
+		logging.LOGGER.Warn().Timestamp().Str("item", utils.MediaItemInfo(*foundItem)).Str("error", fetchErr.Message).
+			Msg("Added subscription set but failed to fetch saved item for immediate download")
+		logAction.AppendResult("immediate_download", "fetch_failed")
+		return logging.LogErrorInfo{}
+	}
+
+	checkedItem := false
+	for _, savedItem := range savedItems.Items {
+		if savedItem.MediaItem.Edition != foundItem.Edition {
+			continue
+		}
+		checkedItem = true
+		result := CheckItem(ctx, savedItem)
+		logging.LOGGER.Info().Timestamp().Str("item", utils.MediaItemInfo(*foundItem)).
+			Str("result", result.OverallResult).
+			Msg("Immediate auto-download after subscription add finished")
+		logAction.AppendResult("auto_download_result", result)
+	}
+	if !checkedItem {
+		logAction.AppendResult("immediate_download", "item_not_found")
+	}
+
 	return logging.LogErrorInfo{}
 }
 
