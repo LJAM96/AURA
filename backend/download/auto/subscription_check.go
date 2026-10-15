@@ -41,6 +41,17 @@ func CheckSubscriptions(ctx context.Context) logging.LogErrorInfo {
 		subCtx = logging.WithCurrentAction(subCtx, subAction)
 		defer subAction.Complete()
 
+		// Keep already-saved sets in sync with the subscription's current image
+		// types and priority. This is a DB-only step, so it still runs even if
+		// MediUX can't be reached below.
+		refreshedSets, refreshErr := database.RefreshSavedSetsForSubscription(subCtx, sub)
+		if refreshErr.Message != "" {
+			logging.LOGGER.Warn().Timestamp().Str("username", sub.Username).Str("error", refreshErr.Message).
+				Msg("Failed to refresh saved sets for subscription check")
+		} else if refreshedSets > 0 {
+			subAction.AppendResult("refreshed_saved_sets", refreshedSets)
+		}
+
 		// Fetch the creator's latest sets from MediUX
 		creatorSets, Err := mediux.GetAllUserSets(subCtx, sub.Username)
 		if Err.Message != "" {

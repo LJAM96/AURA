@@ -147,6 +147,9 @@ type DB interface {
 
 	// Get Enabled User Subscriptions
 	GetEnabledSubscriptions(ctx context.Context) (subs []models.UserSubscription, logErr logging.LogErrorInfo)
+
+	// Refresh Saved Sets for a User Subscription (current ImageTypes and Priority)
+	RefreshSavedSetsForSubscription(ctx context.Context, sub models.UserSubscription) (updated int64, logErr logging.LogErrorInfo)
 }
 
 func NewDatabaseClient() (DB, logging.LogErrorInfo) {
@@ -480,4 +483,32 @@ func GetEnabledSubscriptions(ctx context.Context) (subs []models.UserSubscriptio
 		return nil, logging.Error_DBClientNotInitialized()
 	}
 	return Client.GetEnabledSubscriptions(ctx)
+}
+
+func RefreshSavedSetsForSubscription(ctx context.Context, sub models.UserSubscription) (updated int64, logErr logging.LogErrorInfo) {
+	if Client == nil {
+		return 0, logging.Error_DBClientNotInitialized()
+	}
+	return Client.RefreshSavedSetsForSubscription(ctx, sub)
+}
+
+// RefreshSavedSetsForAllEnabledSubscriptions applies the current ImageTypes and
+// Priority of every enabled subscription to the sets that are already saved for
+// its creator. Returns the total number of updated SavedItems rows.
+func RefreshSavedSetsForAllEnabledSubscriptions(ctx context.Context) (updated int64, logErr logging.LogErrorInfo) {
+	subs, logErr := GetAllSubscriptions(ctx)
+	if logErr.Message != "" {
+		return 0, logErr
+	}
+	for _, sub := range subs {
+		if !sub.Enabled {
+			continue
+		}
+		n, refreshErr := Client.RefreshSavedSetsForSubscription(ctx, sub)
+		if refreshErr.Message != "" {
+			return updated, refreshErr
+		}
+		updated += n
+	}
+	return updated, logging.LogErrorInfo{}
 }

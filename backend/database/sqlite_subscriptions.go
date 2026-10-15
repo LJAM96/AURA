@@ -174,6 +174,82 @@ ORDER BY priority ASC, date_created DESC;
 	return subs, logging.LogErrorInfo{}
 }
 
+// RefreshSavedSetsForSubscription applies the subscription's current image types
+// and priority to every already-saved auto-download set that belongs to the
+// subscribed creator, so edits to a subscription are reflected without having
+// to re-add the items. The media scope and library section filters are honoured
+// so only sets the subscription actually manages are touched.
+func (s *SQliteDB) RefreshSavedSetsForSubscription(ctx context.Context, sub models.UserSubscription) (updated int64, Err logging.LogErrorInfo) {
+	ctx, logAction := logging.AddSubActionToContext(ctx, fmt.Sprintf("Refreshing Saved Sets for Subscription '%s'", sub.Username), logging.LevelDebug)
+	defer logAction.Complete()
+
+	if s == nil || s.conn == nil {
+		logAction.SetError("DB: connection is nil", "", map[string]any{})
+		return 0, *logAction.Error
+	}
+
+	setTypes := scopeSetTypes(sub.MediaScope)
+
+	subSelect := `SELECT id FROM PosterSets WHERE user = ?`
+	args := []any{
+		boolToInt(sub.ImageTypes.Poster),
+		boolToInt(sub.ImageTypes.Backdrop),
+		boolToInt(sub.ImageTypes.SeasonPoster),
+		boolToInt(sub.ImageTypes.SpecialSeasonPoster),
+		boolToInt(sub.ImageTypes.Titlecard),
+		sub.Priority,
+		sub.Username,
+	}
+	if len(setTypes) > 0 {
+		subSelect += fmt.Sprintf(` AND type IN (%s)`, placeholders(len(setTypes)))
+		for _, setType := range setTypes {
+			args = append(args, setType)
+		}
+	}
+
+	q := fmt.Sprintf(`
+UPDATE SavedItems
+SET poster_selected = ?,
+    backdrop_selected = ?,
+    season_poster_selected = ?,
+    special_season_poster_selected = ?,
+    titlecard_selected = ?,
+    priority = ?
+WHERE autodownload = 1
+  AND poster_set_id IN (%s)`, subSelect)
+
+	if sub.LibrarySection != nil && *sub.LibrarySection != "" {
+		q += ` AND library_title = ?`
+		args = append(args, *sub.LibrarySection)
+	}
+
+	res, err := s.conn.ExecContext(ctx, q, args...)
+	if err != nil {
+		logAction.SetError("DB: UPDATE SavedItems for subscription refresh failed", err.Error(), map[string]any{"error": err.Error()})
+		return 0, *logAction.Error
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		updated = n
+	}
+
+	return updated, logging.LogErrorInfo{}
+}
+
+// scopeSetTypes maps a subscription's media scope to the PosterSets.type values
+// it covers. An empty result means "all types".
+func scopeSetTypes(mediaScope string) []string {
+	switch mediaScope {
+	case "shows":
+		return []string{"show"}
+	case "movies":
+		return []string{"movie"}
+	case "collections":
+		return []string{"collection"}
+	default: // "all" or unrecognised
+		return nil
+	}
+}
+
 func (s *SQliteDB) GetSubscriptionByUsername(ctx context.Context, username string) (*models.UserSubscription, logging.LogErrorInfo) {
 	ctx, logAction := logging.AddSubActionToContext(ctx, "Getting User Subscription by Username", logging.LevelInfo)
 	defer logAction.Complete()

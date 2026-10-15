@@ -87,6 +87,13 @@ func UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Apply the updated image types and priority to already-saved sets for
+	// subscribed creators, so changes take effect without waiting for the next
+	// scheduled subscription check.
+	if _, refreshErr := database.RefreshSavedSetsForAllEnabledSubscriptions(ctx); refreshErr.Message != "" {
+		logAction.AppendWarning("subscription_refresh", refreshErr.Message)
+	}
+
 	response.Success = true
 	httpx.SendResponse(w, ld, response)
 }

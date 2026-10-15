@@ -85,6 +85,13 @@ func CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Apply the subscription's image types and priority to any sets already
+	// saved for this creator, so existing sets don't have to wait for the next
+	// scheduled subscription check.
+	if _, refreshErr := database.RefreshSavedSetsForAllEnabledSubscriptions(ctx); refreshErr.Message != "" {
+		logAction.AppendWarning("subscription_refresh", refreshErr.Message)
+	}
+
 	response.ID = id
 	httpx.SendResponse(w, ld, response)
 }
