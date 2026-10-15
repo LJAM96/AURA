@@ -501,7 +501,7 @@ INSERT INTO SavedItems (
   poster_selected, backdrop_selected, season_poster_selected, special_season_poster_selected, titlecard_selected,
 	autodownload, auto_add_new_collection_items, priority, last_downloaded
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(tmdb_id, library_title, edition, poster_set_id) DO UPDATE SET
   poster_selected               = excluded.poster_selected,
   backdrop_selected             = excluded.backdrop_selected,
