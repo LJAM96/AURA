@@ -128,27 +128,31 @@ func processSubscriptionSet(ctx context.Context, sub models.UserSubscription, se
 
 	// Find the item in the user's library cache
 	var foundItem *models.MediaItem
-	var libraryTitle string
+	foundInOtherSection := false
 
-	// Search through all library sections
+	// Search through all library sections. When the subscription is limited to a
+	// specific library section, only that section counts: an item that also
+	// exists in another (earlier-sorted) section must not shadow the match.
 	sections := cache.LibraryStore.GetAllSectionsSortedByTitle()
 	for _, section := range sections {
 		item, found := cache.LibraryStore.GetMediaItemFromSectionByTMDBID(section.Title, itemTMDBID)
-		if found && item != nil && item.RatingKey != "" {
-			foundItem = item
-			libraryTitle = section.Title
-			break
+		if !found || item == nil || item.RatingKey == "" {
+			continue
 		}
+		if sub.LibrarySection != nil && *sub.LibrarySection != "" && *sub.LibrarySection != section.Title {
+			foundInOtherSection = true
+			continue
+		}
+		foundItem = item
+		break
 	}
 
 	if foundItem == nil {
-		logAction.AppendResult("status", "not_in_library")
-		return logging.LogErrorInfo{}
-	}
-
-	// Check if library section matches subscription filter
-	if sub.LibrarySection != nil && *sub.LibrarySection != "" && *sub.LibrarySection != libraryTitle {
-		logAction.AppendResult("status", "library_mismatch")
+		if foundInOtherSection {
+			logAction.AppendResult("status", "library_mismatch")
+		} else {
+			logAction.AppendResult("status", "not_in_library")
+		}
 		return logging.LogErrorInfo{}
 	}
 
